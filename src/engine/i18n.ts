@@ -1,41 +1,33 @@
 import en from '../i18n/en.json'
-import zh from '../i18n/zh-CN.json'
 import type { Locale } from './save'
 
 export type Dictionary = Record<string, string>
-const DICTIONARIES: Record<Locale, Dictionary> = { en, 'zh-CN': zh }
 
-/** Map a browser locale list to a supported locale: any zh* → Simplified Chinese, else English. */
-export function detectLocale(languages: readonly string[] | undefined): Locale {
-  const first = (languages ?? []).find(Boolean) ?? ''
-  return first.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en'
+/** This remix intentionally ships one player-facing locale: English. */
+export function detectLocale(_languages: readonly string[] | undefined): Locale {
+  return 'en'
 }
 
-/** A saved player choice always wins over browser detection. */
-export function resolveLocale(saved: Locale | '', languages: readonly string[] | undefined): Locale {
-  return saved === 'en' || saved === 'zh-CN' ? saved : detectLocale(languages)
+export function resolveLocale(_saved: Locale | '', _languages: readonly string[] | undefined): Locale {
+  return 'en'
 }
 
 export class I18n {
-  locale: Locale
+  locale: Locale = 'en'
   private listeners = new Set<(locale: Locale) => void>()
 
-  constructor(locale: Locale) {
-    this.locale = locale
-    document.documentElement.lang = locale
+  constructor(_locale: Locale = 'en') {
+    document.documentElement.lang = 'en'
   }
 
   /** Look up `key`, replacing `{name}` placeholders. Missing keys render the key so gaps are visible. */
   t(key: string, vars: Record<string, string | number> = {}): string {
-    const text = DICTIONARIES[this.locale][key] ?? DICTIONARIES.en[key] ?? key
+    const text = (en as Dictionary)[key] ?? key
     return text.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`))
   }
 
-  set(locale: Locale): void {
-    if (locale === this.locale) return
-    this.locale = locale
-    document.documentElement.lang = locale
-    for (const fn of this.listeners) fn(locale)
+  set(_locale: Locale): void {
+    // English is the only exposed locale in VOIDSTRIKE.
   }
 
   onChange(fn: (locale: Locale) => void): () => void {
@@ -44,4 +36,4 @@ export class I18n {
   }
 }
 
-export const DICTIONARY_KEYS = { en: Object.keys(en), zh: Object.keys(zh) }
+export const DICTIONARY_KEYS = { en: Object.keys(en) }

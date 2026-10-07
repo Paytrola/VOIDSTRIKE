@@ -1,6 +1,6 @@
 import './styles/main.css'
 import { Audio } from './engine/audio'
-import { I18n, resolveLocale } from './engine/i18n'
+import { I18n } from './engine/i18n'
 import { Input } from './engine/input'
 import { GameLoop } from './engine/loop'
 import { SAVE_KEY, SaveStore, type SaveData } from './engine/save'
@@ -12,11 +12,23 @@ async function boot(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>('#game')!
   const firstRun = safeGet(SAVE_KEY) === null
   const save = new SaveStore()
-
-  const i18n = new I18n(resolveLocale(save.data.locale, navigator.languages))
+  const i18n = new I18n('en')
   const input = new Input(canvas)
   const audio = new Audio()
   let game: Game | undefined
+  let menuMusic: AudioBuffer | undefined
+  let menuMusicSource: AudioBufferSourceNode | undefined
+  const playMenuMusic = () => {
+    if (!menuMusic || menuMusicSource || game?.mode !== 'title' || ui.screen !== 'title') return
+    menuMusicSource = audio.playBuffer(menuMusic, 'music', true)
+  }
+  const stopMenuMusic = () => {
+    if (!menuMusicSource) return
+    try { menuMusicSource.stop() } catch { /* already stopped */ }
+    menuMusicSource.disconnect()
+    menuMusicSource = undefined
+  }
+  const menuMusicUrl = new URL('/manus-storage/Operation_Cryo_Intro_music_BRM5_KLICKAUD_c7f295ac.mp3', document.baseURI).href
   let lockLostAt = 0
 
   const applySettings = (d: SaveData) => {
@@ -25,15 +37,19 @@ async function boot(): Promise<void> {
     audio.setVolumes(d.musicVolume, d.sfxVolume, d.muted)
     if (game) game.reducedMotion = d.reducedMotion
   }
-
-  const startRun = (tutorial: boolean) => {
-    if (!game) return
-    audio.unlock()
-    audio.startMusic()
-    game.start(tutorial)
+  const enterRun = () => {
     ui.show('hud')
     loop.resetAccumulator()
+    input.endFrame()
     input.lockPointer()
+  }
+  const startRun = (tutorial: boolean) => {
+    if (!game) return
+    stopMenuMusic()
+    audio.unlock()
+    ui.clearHudFx()
+    game.start(tutorial)
+    enterRun()
   }
   const pause = () => {
     if (game?.mode !== 'playing') return
@@ -46,31 +62,37 @@ async function boot(): Promise<void> {
     game.resume()
     ui.show('hud')
     loop.resetAccumulator()
+    input.endFrame()
     input.lockPointer()
   }
-
   const ui = new Ui(i18n, save, audio, input, {
     play: () => startRun(!save.data.tutorialDone),
     restart: () => startRun(false),
+    checkpoint: () => {
+      if (!game) return
+      ui.clearHudFx()
+      if (game.startFromCheckpoint()) enterRun()
+      else startRun(false)
+    },
     resume,
     quit: () => {
+      ui.clearHudFx()
       game?.toTitle()
       ui.show('title')
       input.unlockPointer()
+      playMenuMusic()
     },
     settings: patch => {
       const qualityChanged = patch.quality !== undefined && patch.quality !== save.data.quality
       save.update(patch)
       applySettings(save.data)
-      if (patch.locale) i18n.set(patch.locale)
       if (qualityChanged) game?.setQuality(save.data.quality)
     },
   })
   ui.show('boot')
   applySettings(save.data)
 
-  // Boot: the UI above is already on screen; three.js, Rapier (WASM) and the game load as a
-  // separate chunk behind the progress bar. Preload models/textures here too (engine/assets.ts).
+  // three.js, Rapier (WASM) and the game load as a separate chunk behind the progress bar.
   let loaded = 0
   const track = <T>(p: Promise<T>): Promise<T> => p.then(v => (ui.setBootProgress(0.1 + (++loaded / 4) * 0.9), v))
   ui.setBootProgress(0.1)
@@ -85,30 +107,38 @@ async function boot(): Promise<void> {
     save.update({ quality: suggestQuality() })
     ui.refreshSettings()
   }
-
   const renderer = new Renderer(canvas, save.data.quality)
   game = new Game(renderer, input, audio, {
     popup: (text, at, kind) => ui.popup(text, at, kind),
-    hurt: () => ui.hurt(),
-    hint: hint => ui.hint(hint),
+    hurt: kind => ui.hurt(kind),
+    hint: key => ui.hint(key),
+    banner: (key, sub, style) => ui.banner(key, sub, style),
+    letterbox: on => ui.letterbox(on),
+    warning: on => ui.warning(on),
+    bossBar: on => ui.bossBar(on),
+    cue: key => ui.cue(key),
     tutorialDone: () => save.update({ tutorialDone: true }),
-    end: run => {
+    end: (run, info) => {
       input.unlockPointer()
-      window.setTimeout(() => ui.showResults(run), run.phase === 'won' ? 1400 : 900)
+      const fromCheckpoint = g.usedCheckpointRun
+      window.setTimeout(() => ui.showResults(run, info.grade, { checkpoint: info.checkpoint, fromCheckpoint }), run.phase === 'won' ? 1600 : 700)
     },
   })
   game.reducedMotion = save.data.reducedMotion
+  const g = game
   if (import.meta.env.DEV) {
     const [{ registerGameTuning }, { tuning }] = await Promise.all([
       import('../scripts/manus-tuning/adapter.js'), import('./game/tuning'),
     ])
     await registerGameTuning(tuning)
   }
-  const g = game
-
+  void audio.load(menuMusicUrl).then(buffer => {
+    menuMusic = buffer
+    if (audio.running) playMenuMusic()
+  }).catch(error => console.warn('Menu music could not be loaded', error))
   const loop = new GameLoop({
     step: dt => g.step(dt),
-    render: (alpha, frameSeconds) => {
+    render: (alpha, frameSeconds, simSeconds) => {
       input.update()
       if (input.consume('pause') && performance.now() - lockLostAt > 300) {
         if (g.mode === 'playing') pause()
@@ -116,11 +146,21 @@ async function boot(): Promise<void> {
       }
       ui.frame(frameSeconds)
       loop.paused = g.mode === 'paused'
-      g.render(alpha, frameSeconds)
-      if (g.mode === 'playing' || g.mode === 'ended') ui.updateHud(g.run, g.compass())
+      g.render(alpha, frameSeconds, simSeconds)
+      loop.timeScale = g.timeScale
+      if (g.mode !== 'title') ui.updateHud(g.hud())
     },
   })
   loop.start()
+  g.toTitle()
+
+  // Browsers only allow audio after a gesture: unlock on the first input and start the supplied title track.
+  const unlock = () => {
+    audio.unlock()
+    if (g.mode === 'title') playMenuMusic()
+  }
+  window.addEventListener('pointerdown', unlock, { capture: true })
+  window.addEventListener('keydown', unlock, { capture: true })
 
   document.addEventListener('pointerlockchange', () => {
     // Browsers release pointer lock on Escape without delivering the key: treat that as pause.
@@ -137,10 +177,9 @@ async function boot(): Promise<void> {
     if (g.mode === 'playing') input.lockPointer()
   })
   new TouchControls(document.getElementById('ui')!, input, () => g.mode === 'playing')
-
-  window.setTimeout(() => ui.show('title'), 250)
-  // Debug/test hook (read-only use): smoke tests inspect run state through it.
-  ;(window as unknown as { __game: unknown }).__game = { game: g, ui, input, save }
+  window.setTimeout(() => { ui.show('title'); playMenuMusic() }, 300)
+  // Debug/test hook: QA scripts drive and inspect the run through it.
+  ;(window as unknown as { __game: unknown }).__game = { game: g, ui, input, save, loop }
 }
 
 function safeGet(key: string): string | null {
@@ -154,5 +193,8 @@ function safeGet(key: string): string | null {
 boot().catch(err => {
   console.error(err)
   const el = document.getElementById('ui')
-  if (el) el.innerHTML = `<div class="fatal">Failed to start: ${String((err as Error)?.message ?? err).replace(/[<>&]/g, '')}</div>`
+  if (el) {
+    el.innerHTML = '<section class="screen screen-boot is-active"><div class="boot-mark"><img src="./assets/share/favicon.png" alt="" /></div><h1 class="boot-logo">VOIDSTRIKE</h1><p class="boot-label">Startup failed. Check your connection, then retry.</p><button class="btn btn-primary" type="button">Retry</button></section>'
+    el.querySelector('button')?.addEventListener('click', () => window.location.reload())
+  }
 })

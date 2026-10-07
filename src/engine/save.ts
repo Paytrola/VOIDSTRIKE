@@ -2,15 +2,15 @@
  * Versioned local save. Everything the player keeps between sessions lives in one JSON record so
  * it is easy to migrate. Corrupt or foreign data falls back to defaults instead of crashing.
  */
-export type Locale = 'en' | 'zh-CN'
+export type Locale = 'en'
 export type Quality = 'low' | 'medium' | 'high'
 
-export type ScoreEntry = { name: string; score: number; seconds: number; at: number }
+export type ScoreEntry = { name: string; score: number; seconds: number; at: number; grade?: string }
 
 export type SaveData = {
   version: 1
-  /** '' = never chosen; the game follows the browser language until the player picks one. */
-  locale: Locale | ''
+  /** VOIDSTRIKE is pinned to English. */
+  locale: Locale
   musicVolume: number
   sfxVolume: number
   muted: boolean
@@ -23,13 +23,13 @@ export type SaveData = {
   leaderboard: ScoreEntry[]
 }
 
-export const SAVE_KEY = 'game3d.save'
+export const SAVE_KEY = 'heliospur.save'
 export const LEADERBOARD_SIZE = 10
 
 export function defaultSave(): SaveData {
   return {
     version: 1,
-    locale: '',
+    locale: 'en',
     musicVolume: 0.7,
     sfxVolume: 0.8,
     muted: false,
@@ -61,7 +61,7 @@ export function parseSave(raw: string | null): SaveData {
   const board = Array.isArray(data.leaderboard) ? data.leaderboard : []
   return {
     version: 1,
-    locale: data.locale === 'en' || data.locale === 'zh-CN' ? data.locale : '',
+    locale: 'en',
     musicVolume: clamp01(data.musicVolume, base.musicVolume),
     sfxVolume: clamp01(data.sfxVolume, base.sfxVolume),
     muted: data.muted === true,
@@ -73,7 +73,7 @@ export function parseSave(raw: string | null): SaveData {
     playerName: typeof data.playerName === 'string' && data.playerName.trim() ? data.playerName.trim().slice(0, 16) : base.playerName,
     leaderboard: board
       .filter((e): e is ScoreEntry => !!e && typeof e === 'object' && typeof (e as ScoreEntry).name === 'string' && Number.isFinite((e as ScoreEntry).score))
-      .map(e => ({ name: e.name.slice(0, 16), score: Math.max(0, Math.floor(e.score)), seconds: Number.isFinite(e.seconds) ? e.seconds : 0, at: Number.isFinite(e.at) ? e.at : 0 }))
+      .map(e => ({ name: e.name.slice(0, 16), score: Math.max(0, Math.floor(e.score)), seconds: Number.isFinite(e.seconds) ? e.seconds : 0, at: Number.isFinite(e.at) ? e.at : 0, grade: typeof e.grade === 'string' && /^[SABCD]$/.test(e.grade) ? e.grade : undefined }))
       .slice(0, LEADERBOARD_SIZE),
   }
 }

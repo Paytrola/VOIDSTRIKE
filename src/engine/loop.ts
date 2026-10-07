@@ -8,8 +8,12 @@
 export type LoopCallbacks = {
   /** Advance simulation by exactly one fixed step. */
   step: (stepSeconds: number) => void
-  /** Draw the current frame; `alpha` blends the last two simulation states. `frameSeconds` is wall time. */
-  render: (alpha: number, frameSeconds: number) => void
+  /**
+   * Draw the current frame; `alpha` blends the last two simulation states. `frameSeconds` is wall
+   * time; `simSeconds` is the scaled simulation time that elapsed this frame (0 while paused or
+   * frozen by hit-stop), for cosmetic effects that should slow down with the world.
+   */
+  render: (alpha: number, frameSeconds: number, simSeconds: number) => void
 }
 
 export class GameLoop {
@@ -20,6 +24,11 @@ export class GameLoop {
   private running = false
   /** Simulation is paused (menus); rendering continues so UI and backgrounds stay alive. */
   paused = false
+  /**
+   * Multiplies simulated time per rendered frame: 0 freezes the simulation (hit-stop) and values
+   * below 1 give slow motion. The fixed step size never changes, so physics stays stable.
+   */
+  timeScale = 1
   /** Guards against the "spiral of death" after a tab was hidden or the device stalled. */
   private readonly maxFrameSeconds = 0.25
 
@@ -33,26 +42,18 @@ export class GameLoop {
     this.last = performance.now()
     const frame = (now: number) => {
       if (!this.running) return
-      // Keep the loop alive if a callback throws. Scheduling first also lets a
-      // callback's stop() cancel the successor without leaving a second loop.
-      this.handle = requestAnimationFrame(frame)
       const frameSeconds = Math.min((now - this.last) / 1000, this.maxFrameSeconds)
       this.last = now
-      try {
-        if (!this.paused) {
-          this.accumulator += frameSeconds
-          while (this.accumulator >= this.stepSeconds) {
-            this.callbacks.step(this.stepSeconds)
-            this.accumulator -= this.stepSeconds
-          }
+      const simSeconds = this.paused ? 0 : frameSeconds * Math.max(0, this.timeScale)
+      if (!this.paused) {
+        this.accumulator += simSeconds
+        while (this.accumulator >= this.stepSeconds) {
+          this.callbacks.step(this.stepSeconds)
+          this.accumulator -= this.stepSeconds
         }
-        this.callbacks.render(this.paused ? 1 : this.accumulator / this.stepSeconds, frameSeconds)
-      } catch (error) {
-        // Failed updates may have partially advanced gameplay. Do not replay
-        // their accumulated time, and keep the original error observable.
-        this.resetAccumulator()
-        throw error
       }
+      this.callbacks.render(this.paused ? 1 : this.accumulator / this.stepSeconds, frameSeconds, simSeconds)
+      this.handle = requestAnimationFrame(frame)
     }
     this.handle = requestAnimationFrame(frame)
   }

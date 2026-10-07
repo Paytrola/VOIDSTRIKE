@@ -1,39 +1,48 @@
 /**
- * Unified input: keyboard + mouse (pointer lock), gamepad and touch all feed one action state.
- * Gameplay reads `move`, `look` and `pressed()/held()`; it never checks raw keys.
+ * Unified input: keyboard + mouse, gamepad and touch all feed one action state.
+ * Gameplay reads `move` (ship steering), aim sources (`takeMouseDelta`, `pointer`, `aim`) and
+ * `held()/consume()` for actions; it never checks raw keys.
  *
- * Call `endFrame()` once per rendered frame after gameplay consumed edge-triggered presses.
+ * Bindings
+ *   Keyboard/mouse: WASD/arrows steer, mouse aims (pointer lock gives relative aim), left mouse
+ *                   or J fires, Space / K / right mouse rolls, Esc/P pauses.
+ *   Gamepad:        left stick steers, right stick aims, RT/RB/A fire, LT/LB/X roll, Start pauses.
+ *   Touch:          on-screen stick steers, FIRE and ROLL buttons (see ui/touch.ts).
+ *
+ * Call `update()` once per rendered frame before gameplay and `endFrame()` after it.
  */
-export type Action = 'jump' | 'sprint' | 'dash' | 'pause' | 'confirm' | 'back' | 'interact'
+export type Action = 'fire' | 'roll' | 'pause' | 'confirm' | 'back' | 'skip'
 export type InputMethod = 'keyboard' | 'gamepad' | 'touch'
 
 const KEY_BINDINGS: Record<Action, string[]> = {
-  jump: ['Space'],
-  sprint: ['ShiftLeft', 'ShiftRight'],
-  dash: ['KeyF', 'KeyJ'],
+  fire: ['KeyJ'],
+  roll: ['Space', 'KeyK'],
   pause: ['Escape', 'KeyP'],
   confirm: ['Enter', 'NumpadEnter'],
-  // Menus handle Escape/Backspace themselves via DOM keydown; `back` is the gamepad B button.
   back: [],
-  interact: ['KeyE'],
+  skip: ['Tab'],
 }
 const MOVE_KEYS = { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'] }
-// Standard gamepad mapping: A=0, B=1, X=2, Y=3, LB=4, RB=5, RT=7, Start=9, L3=10.
-const PAD_BINDINGS: Record<Action, number[]> = { jump: [0], sprint: [4, 10], dash: [2, 5, 7], pause: [9], confirm: [0], back: [1], interact: [3] }
+// Standard mapping: A=0 B=1 X=2 Y=3 LB=4 RB=5 LT=6 RT=7 Back=8 Start=9.
+const PAD_BINDINGS: Record<Action, number[]> = { fire: [7, 5, 0], roll: [6, 4, 2], pause: [9], confirm: [0], back: [1], skip: [8, 3] }
 
 export class Input {
-  /** Movement intent in [-1, 1]: x = strafe right, y = forward. */
+  /** Steering intent in [-1, 1]: x = right, y = up. */
   readonly move = { x: 0, y: 0 }
-  /** Camera look delta accumulated since the last `endFrame()` (radians-ish units, pre-sensitivity). */
-  readonly look = { x: 0, y: 0 }
-  method: InputMethod = 'keyboard'
-  /** Multiplies look deltas; settings screen writes it. */
+  /** Right-stick aim in [-1, 1] (gamepad). */
+  readonly aim = { x: 0, y: 0 }
+  /** Last absolute pointer position in NDC (-1..1, y up) and whether it moved since read. */
+  readonly pointer = { x: 0, y: 0, moved: false }
+  /** Touch-first devices (phones, tablets) start in touch mode so prompts and controls fit. */
+  method: InputMethod = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches ? 'touch' : 'keyboard'
+  /** Multiplies aim speed for mouse deltas and sticks; settings write it. */
   sensitivity = 1
   invertY = false
-
   private keys = new Set<string>()
+  private mouseButtons = new Set<number>()
   private held_ = new Set<Action>()
   private pressed_ = new Set<Action>()
+  private mouseDelta = { x: 0, y: 0 }
   private touchMove = { x: 0, y: 0 }
   private touchButtons = new Set<Action>()
   private padPrev = new Set<Action>()
@@ -45,33 +54,57 @@ export class Input {
       this.listeners.push(() => target.removeEventListener(type, fn as EventListener, opts))
     }
     on(window, 'keydown', e => {
-      if (e.repeat) return
-      this.keys.add(e.code)
-      this.method = 'keyboard'
-      for (const [action, codes] of Object.entries(KEY_BINDINGS) as [Action, string[]][]) {
-        if (codes.includes(e.code)) this.pressed_.add(action)
-      }
-      // Keep the page from scrolling, but never block typing in text fields (leaderboard name).
       const typing = (e.target as HTMLElement | null)?.matches?.('input, textarea')
-      if (!typing && (e.code === 'Space' || e.code.startsWith('Arrow'))) e.preventDefault()
+      if (typing) return
+      if (!e.repeat) {
+        this.keys.add(e.code)
+        this.method = 'keyboard'
+        for (const [action, codes] of Object.entries(KEY_BINDINGS) as [Action, string[]][]) {
+          if (codes.includes(e.code)) this.pressed_.add(action)
+        }
+      }
+      if (e.code === 'Space' || e.code === 'Tab' || e.code.startsWith('Arrow')) e.preventDefault()
     })
     on(window, 'keyup', e => this.keys.delete(e.code))
-    on(window, 'blur', () => this.keys.clear())
-    on(window, 'mousedown', e => {
-      // Left click dashes while the mouse is captured for camera look.
-      if (document.pointerLockElement === canvas && e.button === 0) this.pressed_.add('dash')
+    on(window, 'blur', () => {
+      this.keys.clear()
+      this.mouseButtons.clear()
     })
+    on(canvas, 'mousedown', e => {
+      this.method = 'keyboard'
+      this.mouseButtons.add(e.button)
+      if (e.button === 2) this.pressed_.add('roll')
+      if (e.button === 0) this.pressed_.add('fire')
+    })
+    on(window, 'mouseup', e => this.mouseButtons.delete(e.button))
+    on(canvas, 'contextmenu', e => e.preventDefault())
     on(window, 'mousemove', e => {
-      if (document.pointerLockElement !== canvas) return
-      this.look.x += e.movementX * 0.0022
-      this.look.y += e.movementY * 0.0022
+      if (document.pointerLockElement === canvas) {
+        this.mouseDelta.x += e.movementX
+        this.mouseDelta.y += e.movementY
+      } else {
+        const r = canvas.getBoundingClientRect()
+        this.pointer.x = ((e.clientX - r.left) / Math.max(1, r.width)) * 2 - 1
+        this.pointer.y = -(((e.clientY - r.top) / Math.max(1, r.height)) * 2 - 1)
+        this.pointer.moved = true
+      }
+      if (Math.abs(e.movementX) + Math.abs(e.movementY) > 1) this.method = 'keyboard'
     })
   }
 
-  /** Request pointer lock for mouse look (must be called from a user gesture). */
+  get pointerLocked(): boolean {
+    return document.pointerLockElement === this.canvas
+  }
+
+  /** Request pointer lock for relative mouse aim (must be called from a user gesture). */
   lockPointer(): void {
     if (this.method !== 'touch' && document.pointerLockElement !== this.canvas) {
-      this.canvas.requestPointerLock?.()?.catch?.(() => undefined)
+      try {
+        const p = this.canvas.requestPointerLock?.() as unknown as Promise<void> | undefined
+        p?.catch?.(() => undefined)
+      } catch {
+        // Unsupported (embedded frames): absolute pointer aim still works.
+      }
     }
   }
 
@@ -79,17 +112,11 @@ export class Input {
     if (document.pointerLockElement) document.exitPointerLock()
   }
 
-  /** Touch controls feed these from the on-screen joystick and buttons. */
+  /** Touch controls feed these from the on-screen stick and buttons. */
   setTouchMove(x: number, y: number): void {
     this.method = 'touch'
     this.touchMove.x = x
     this.touchMove.y = y
-  }
-
-  addTouchLook(dx: number, dy: number): void {
-    this.method = 'touch'
-    this.look.x += dx * 0.006
-    this.look.y += dy * 0.006
   }
 
   setTouchButton(action: Action, down: boolean): void {
@@ -108,14 +135,18 @@ export class Input {
     for (const [action, codes] of Object.entries(KEY_BINDINGS) as [Action, string[]][]) {
       if (k(codes)) this.held_.add(action)
     }
+    if (this.mouseButtons.has(0)) this.held_.add('fire')
+    if (this.mouseButtons.has(2)) this.held_.add('roll')
     for (const action of this.touchButtons) this.held_.add(action)
     if (this.touchMove.x !== 0 || this.touchMove.y !== 0) {
       x = this.touchMove.x
       y = this.touchMove.y
     }
+    this.aim.x = 0
+    this.aim.y = 0
     const pad = navigator.getGamepads?.().find(p => p && p.connected)
     if (pad) {
-      const dead = (v: number) => (Math.abs(v) < 0.18 ? 0 : v)
+      const dead = (v: number) => (Math.abs(v) < 0.16 ? 0 : (v - Math.sign(v) * 0.16) / 0.84)
       const lx = dead(pad.axes[0] ?? 0)
       const ly = dead(pad.axes[1] ?? 0)
       const rx = dead(pad.axes[2] ?? 0)
@@ -126,11 +157,11 @@ export class Input {
         x = lx
         y = -ly
       }
-      this.look.x += rx * 0.045
-      this.look.y += ry * 0.045
+      this.aim.x = rx
+      this.aim.y = -ry * (this.invertY ? -1 : 1)
       const now = new Set<Action>()
       for (const [action, buttons] of Object.entries(PAD_BINDINGS) as [Action, number[]][]) {
-        if (buttons.some(i => pad.buttons[i]?.pressed)) now.add(action)
+        if (buttons.some(i => (pad.buttons[i]?.value ?? 0) > 0.35 || pad.buttons[i]?.pressed)) now.add(action)
       }
       for (const action of now) {
         this.held_.add(action)
@@ -154,18 +185,25 @@ export class Input {
 
   /**
    * Read and clear a press. Use this inside fixed simulation steps: several steps can run in one
-   * rendered frame, and a press must trigger exactly one jump/confirm.
+   * rendered frame, and a press must trigger exactly one roll/confirm.
    */
   consume(action: Action): boolean {
     return this.pressed_.delete(action)
   }
 
-  /** Consume the look delta with sensitivity/invert applied. */
-  takeLook(): { x: number; y: number } {
-    const out = { x: this.look.x * this.sensitivity, y: this.look.y * this.sensitivity * (this.invertY ? -1 : 1) }
-    this.look.x = 0
-    this.look.y = 0
+  /** Relative mouse movement (pixels × sensitivity) since the last read, with invert applied. */
+  takeMouseDelta(): { x: number; y: number } {
+    const out = { x: this.mouseDelta.x * this.sensitivity, y: this.mouseDelta.y * this.sensitivity * (this.invertY ? -1 : 1) }
+    this.mouseDelta.x = 0
+    this.mouseDelta.y = 0
     return out
+  }
+
+  /** Read the absolute pointer if it moved since the last read. */
+  takePointer(): { x: number; y: number } | null {
+    if (!this.pointer.moved) return null
+    this.pointer.moved = false
+    return { x: this.pointer.x, y: this.pointer.y }
   }
 
   endFrame(): void {

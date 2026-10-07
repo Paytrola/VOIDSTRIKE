@@ -1,6 +1,6 @@
 // Fails the build when the shipped bundle grows past the budget, so starter projects stay fast
-// to load on mobile networks. JS/CSS are measured gzipped (what the CDN sends); bundled
-// TTF/WOFF2 fonts are measured as shipped and budgeted separately because CJK coverage is large.
+// to load on mobile networks. JS/CSS are measured gzipped (what the CDN sends); fonts are already
+// compressed woff2 and budgeted separately because CJK coverage is large.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -18,7 +18,7 @@ const files = walk('dist').map(path => {
 })
 const sum = pred => files.filter(pred).reduce((n, f) => n + f.wire, 0)
 const js = sum(f => f.path.endsWith('.js'))
-const fonts = sum(f => /\.(ttf|woff2)$/.test(f.path))
+const fonts = sum(f => f.path.endsWith('.woff2'))
 const transfer = sum(f => !f.path.endsWith('.txt'))
 const mb = n => `${(n / MB).toFixed(2)} MB`
 console.log(`bundle (gzip): js ${mb(js)} / fonts ${mb(fonts)} / transfer ${mb(transfer)}`)
