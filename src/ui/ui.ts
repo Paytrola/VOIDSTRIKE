@@ -72,6 +72,7 @@ export class Ui {
     this.root = document.getElementById('ui')!
     this.root.insertAdjacentHTML('beforeend', this.template())
     for (const node of this.root.querySelectorAll<HTMLElement>('[data-el]')) this.el[node.dataset.el!] = node
+    this.el.bootRetry.addEventListener('click', () => window.location.reload())
     this.root.addEventListener('click', e => this.onClick(e))
     this.root.addEventListener('input', e => this.onInput(e))
     this.root.addEventListener('focusin', e => {
@@ -118,8 +119,31 @@ export class Ui {
     })
   }
 
-  setBootProgress(progress: number): void {
-    this.el.bootBar.style.transform = `scaleX(${Math.max(0.04, Math.min(1, progress))})`
+  setBootProgress(progress: number | null): void {
+    const track = this.el.bootBar.parentElement!
+    const indeterminate = progress === null
+    track.classList.toggle('is-indeterminate', indeterminate)
+    if (indeterminate) {
+      track.removeAttribute('aria-valuenow')
+      track.setAttribute('aria-valuetext', this.el.bootLabel.textContent ?? '')
+      this.el.bootBar.style.transform = ''
+      return
+    }
+    const bounded = Math.max(0.04, Math.min(1, progress))
+    track.setAttribute('aria-valuenow', String(Math.round(bounded * 100)))
+    track.removeAttribute('aria-valuetext')
+    this.el.bootBar.style.transform = `scaleX(${bounded})`
+  }
+
+  setBootStatus(key: string): void {
+    const text = this.i18n.t(key)
+    this.el.bootLabel.textContent = text
+    const track = this.el.bootBar.parentElement!
+    if (track.classList.contains('is-indeterminate')) track.setAttribute('aria-valuetext', text)
+  }
+
+  setBootRetryVisible(visible: boolean): void {
+    this.el.bootRetry.hidden = !visible
   }
 
   // ─── HUD ────────────────────────────────────────────────────────────────
@@ -549,8 +573,9 @@ export class Ui {
 <section class="screen screen-boot is-active" data-screen="boot">
   <div class="boot-mark"><img src="./assets/share/favicon.png" alt="" /></div>
   <div class="boot-logo outlined" data-i18n="game.title"></div>
-  <div class="boot-bar"><i data-el="bootBar"></i></div>
-  <div class="boot-label" data-i18n="boot.loading"></div>
+  <div class="boot-bar" role="progressbar" aria-labelledby="boot-status" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i data-el="bootBar"></i></div>
+  <div id="boot-status" class="boot-label" data-el="bootLabel" data-i18n="boot.loading" aria-live="polite"></div>
+  <button type="button" class="btn btn-primary boot-retry" data-el="bootRetry" data-i18n="boot.retry" hidden></button>
 </section>
 
 <section class="screen screen-title" data-screen="title">

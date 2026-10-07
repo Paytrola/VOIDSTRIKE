@@ -60,7 +60,10 @@ button { font: inherit; color: inherit; }
 .boot-logo { font-size: clamp(38px, 7vw, 68px); font-weight: 800; font-style: italic; letter-spacing: 0.06em; color: var(--cyan); }
 .boot-bar { width: min(340px, 70vw); height: 12px; background: var(--ink-2); border: 2px solid var(--ink-4); overflow: hidden; transform: skewX(-18deg); }
 .boot-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--cyan-2), var(--amber)); transform-origin: left; transform: scaleX(0.04); transition: transform 0.3s ease; }
+.boot-bar.is-indeterminate i { width: 38%; animation: boot-scan 1.2s ease-in-out infinite; }
 .boot-label { font-weight: 800; letter-spacing: 0.34em; text-transform: uppercase; font-size: 12px; opacity: 0.7; }
+.boot-retry { min-width: 180px; padding: 10px 22px; font-size: 15px; text-align: center; }
+.boot-retry[hidden] { display: none; }
 
 /* ─── Buttons ──────────────────────────────────────────────────────────── */
 .menu { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
@@ -395,6 +398,7 @@ body.has-touch .hud-top-right { right: calc(16px + var(--safe-r)); }
 @keyframes rise { from { opacity: 0; transform: translateY(24px); } }
 @keyframes pop { from { opacity: 0; transform: scale(0.86); } }
 @keyframes bob { 50% { transform: translateY(-6px) rotate(-4deg); } }
+@keyframes boot-scan { from { transform: translateX(-110%); } to { transform: translateX(300%); } }
 @keyframes pulse { 50% { transform: skewX(-14deg) scale(1.06); } }
 @keyframes blink { 50% { opacity: 0.45; } }
 @keyframes shakeX { 20% { translate: -6px 0; } 40% { translate: 5px 0; } 60% { translate: -4px 0; } 80% { translate: 2px 0; } }

@@ -8,6 +8,13 @@ import type { Game } from './game/game'
 import { TouchControls } from './ui/touch'
 import { Ui } from './ui/ui'
 
+let bootTimers: number[] = []
+
+function clearBootTimers(): void {
+  for (const timer of bootTimers) window.clearTimeout(timer)
+  bootTimers = []
+}
+
 async function boot(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>('#game')!
   const firstRun = safeGet(SAVE_KEY) === null
@@ -92,9 +99,30 @@ async function boot(): Promise<void> {
   ui.show('boot')
   applySettings(save.data)
 
+  let bootIsSlow = false
+  bootTimers = [
+    window.setTimeout(() => {
+      if (ui.screen !== 'boot') return
+      bootIsSlow = true
+      ui.setBootProgress(null)
+      ui.setBootStatus('boot.slow')
+    }, 10_000),
+    window.setTimeout(() => {
+      if (ui.screen !== 'boot') return
+      bootIsSlow = true
+      ui.setBootProgress(null)
+      ui.setBootStatus('boot.stalled')
+      ui.setBootRetryVisible(true)
+    }, 30_000),
+  ]
+
   // three.js, Rapier (WASM) and the game load as a separate chunk behind the progress bar.
   let loaded = 0
-  const track = <T>(p: Promise<T>): Promise<T> => p.then(v => (ui.setBootProgress(0.1 + (++loaded / 4) * 0.9), v))
+  const track = <T>(p: Promise<T>): Promise<T> => p.then(v => {
+    loaded += 1
+    if (!bootIsSlow) ui.setBootProgress(0.1 + (loaded / 4) * 0.9)
+    return v
+  })
   ui.setBootProgress(0.1)
   const [{ Game }, { Renderer, suggestQuality }, physics] = await Promise.all([
     track(import('./game/game')),
@@ -177,6 +205,7 @@ async function boot(): Promise<void> {
     if (g.mode === 'playing') input.lockPointer()
   })
   new TouchControls(document.getElementById('ui')!, input, () => g.mode === 'playing')
+  clearBootTimers()
   window.setTimeout(() => { ui.show('title'); playMenuMusic() }, 300)
   // Debug/test hook: QA scripts drive and inspect the run through it.
   ;(window as unknown as { __game: unknown }).__game = { game: g, ui, input, save, loop }
@@ -191,6 +220,7 @@ function safeGet(key: string): string | null {
 }
 
 boot().catch(err => {
+  clearBootTimers()
   console.error(err)
   const el = document.getElementById('ui')
   if (el) {

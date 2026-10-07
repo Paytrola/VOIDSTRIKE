@@ -17,6 +17,12 @@ describe('i18n', () => {
     expect(resolveLocale('', ['zh-CN'])).toBe('en')
   })
 
+  it('provides recoverable boot-status copy', () => {
+    expect(en['boot.slow']).toContain('initializing')
+    expect(en['boot.stalled']).toContain('retry')
+    expect(en['boot.retry']).toBe('Retry')
+  })
+
   it('includes the game title and a clear deployment instruction', () => {
     expect(en['game.title']).toBe('VOIDSTRIKE')
     expect(en['menu.deployPrefix']).toBe('PRESS')
