@@ -5,12 +5,13 @@ import type { Input } from '../engine/input'
 import { Sequencer } from '../engine/music'
 import { Physics } from '../engine/physics'
 import type { Renderer } from '../engine/renderer'
-import type { Quality } from '../engine/save'
+import type { AircraftClassId, Quality } from '../engine/save'
 import type { Timeline } from '../engine/timeline'
 import { QUERY_SHOTS, type Arena } from './arena'
 import { SOUNDTRACK, defineSounds } from './audio-content'
 import { Boss, type BossState } from './boss'
 import { EnemyBullets, PlayerShots, type EnemyBullet } from './bullets'
+import { AIRCRAFT_CLASSES } from './aircraft'
 import { CONFIG } from './config'
 import { Enemies, ENEMY_STATS, type Enemy, type SpawnSpec } from './enemies'
 import { Environment, SpeedField } from './env'
@@ -46,6 +47,8 @@ export type HudData = {
   hull: number
   shield: number
   rollReady: number
+  abilityReady: number
+  abilityActive: boolean
   grazes: number
   boss: { phase: number; fraction: number; total: number } | null
   reticle: { x: number; y: number; inner: { x: number; y: number }; locked: boolean; visible: boolean }
@@ -57,6 +60,7 @@ type CamMode = 'play' | 'launch' | 'boss' | 'title' | 'death' | 'victory'
 const tmpA = new THREE.Vector3()
 const tmpB = new THREE.Vector3()
 const tmpC = new THREE.Vector3()
+const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
 export class Game implements Arena, Director {
   mode: GameMode = 'title'
@@ -83,7 +87,8 @@ export class Game implements Arena, Director {
   readonly music: Sequencer
   private stage: Timeline<Director> = buildStage()
   private fireCooldown = 0
-  private gunSide = 1
+  private abilityCooldown = 0
+  private abilityTime = 0
   private boost = 0
   private boostTarget = 0
   private camMode: CamMode = 'title'
@@ -134,6 +139,12 @@ export class Game implements Arena, Director {
     this.music = new Sequencer(audio, SOUNDTRACK)
     this.rail.reset(0)
     this.ship.reset()
+  }
+
+  setAircraftClass(id: AircraftClassId): void {
+    if (this.mode !== 'title') return
+    this.ship.setAircraftClass(id)
+    this.run = createRun(CONFIG, AIRCRAFT_CLASSES[id].hp)
   }
 
   // ─── Arena ─────────────────────────────────────────────────────────────
@@ -301,6 +312,8 @@ export class Game implements Arena, Director {
     this.endSent = false
     this.lastMultiplier = 1
     this.fireCooldown = 0
+    this.abilityCooldown = 0
+    this.abilityTime = 0
     this.boost = this.boostTarget = 0
     this.bullets.speedScale = 1
   }
@@ -309,7 +322,7 @@ export class Game implements Arena, Director {
     tuning.activate('run')
     this.resetWorld()
     this.tutorial = tutorial
-    this.run = { ...createRun(), unranked: tuning.unranked }
+    this.run = { ...createRun(CONFIG, this.ship.profile.hp), unranked: tuning.unranked }
     this.time = 0
     this.stage = buildStage()
     this.checkpoint = null
@@ -328,7 +341,7 @@ export class Game implements Arena, Director {
     tuning.activate('run')
     this.resetWorld()
     this.tutorial = false
-    this.run = { ...cp.run, hull: CONFIG.hull.max, shield: CONFIG.shield.max, phase: 'playing', invulnerable: 0, unranked: cp.run.unranked || tuning.unranked }
+    this.run = { ...cp.run, hull: this.ship.profile.hp, shield: CONFIG.shield.max, phase: 'playing', invulnerable: 0, unranked: cp.run.unranked || tuning.unranked }
     this.stage = buildStage()
     this.stage.seek('boss')
     this.usedCheckpoint = true
@@ -355,7 +368,7 @@ export class Game implements Arena, Director {
   toTitle(): void {
     this.resetWorld()
     this.mode = 'title'
-    this.run = createRun()
+    this.run = createRun(CONFIG, this.ship.profile.hp)
     this.camMode = 'title'
     this.audio.duckMusic(1)
     this.setMusic('none')
@@ -379,7 +392,7 @@ export class Game implements Arena, Director {
   }
 
   private onCollected(e: Enemy): void {
-    this.run = repair(this.run, CONFIG.repair.hull, CONFIG.repair.shield)
+    this.run = repair(this.run, CONFIG.repair.hull, CONFIG.repair.shield, CONFIG, this.ship.profile.hp)
     this.audio.play('pickup')
     this.fx.ring(e.pos, 5, '#9dff5c', 0.4)
     this.fx.flare(e.pos, 4, '#9dff5c', 0.3)
@@ -424,6 +437,11 @@ export class Game implements Arena, Director {
     }
     const playing = this.mode === 'playing'
     const controllable = playing && this.ship.alive && this.camMode !== 'launch' && this.camMode !== 'victory'
+    if (playing) {
+      this.abilityCooldown = Math.max(0, this.abilityCooldown - dt)
+      this.abilityTime = Math.max(0, this.abilityTime - dt)
+    }
+    this.ship.barrierActive = this.ship.profile.ability.kind === 'aegis' && this.abilityTime > 0
     let move = { x: this.input.move.x, y: this.input.move.y }
     let follow: THREE.Vector3 | null = null
     if (this.debug.bot && controllable) move = this.botMove()
@@ -431,6 +449,7 @@ export class Game implements Arena, Director {
       follow = tmpC.set(this.reticle.x * CONFIG.ship.boundsX * 1.12, this.reticle.y * CONFIG.ship.boundsY * 1.3 - 0.4, 0)
     }
     if (!controllable) move = { x: 0, y: 0 }
+    if (controllable && this.input.consume('ability') && this.abilityCooldown <= 0) this.activateAbility()
     if (controllable && (this.input.consume('roll') || (this.debug.bot && this.botShouldRoll()))) {
       if (this.ship.roll(move.x || this.ship.vel.x)) {
         this.run = shield(this.run, CONFIG.roll.invulnerable)
@@ -438,8 +457,10 @@ export class Game implements Arena, Director {
         this.impact.kick(-Math.sign(move.x || 1) * 0.25, 0)
       }
     }
-    this.ship.step(dt, move, follow, 1, this.rail.speed)
-    this.ship.thrust = this.boost
+    const profileAbility = this.ship.profile.ability
+    const afterburn = profileAbility.kind === 'afterburn' && this.abilityTime > 0
+    this.ship.step(dt, move, follow, afterburn ? (profileAbility.speedBoost ?? 1) : 1, this.rail.speed)
+    this.ship.thrust = Math.max(this.boost, afterburn ? 0.9 : 0)
     // Weapons.
     this.fireCooldown -= dt
     const wantFire = controllable && (this.input.held('fire') || this.debug.bot)
@@ -452,7 +473,7 @@ export class Game implements Arena, Director {
     this.bullets.update(dt, this.ship.pos, CONFIG.ship.hitRadius, CONFIG.ship.grazeRadius, b => this.onBulletHit(b), b => this.onGraze(b))
     if (playing) this.run = tick(this.run, dt)
     if (this.run.combo === 0) this.lastMultiplier = 1
-    if (playing && this.run.hull < 30 && this.ship.alive) {
+    if (playing && this.run.hull < this.ship.profile.hp * 0.3 && this.ship.alive) {
       this.lowHullBeep -= dt
       if (this.lowHullBeep <= 0) {
         this.audio.play('lowHull')
@@ -466,7 +487,7 @@ export class Game implements Arena, Director {
     if (this.winTimer > 0) {
       this.winTimer -= dt
       if (this.winTimer <= 0) {
-        this.run = win(this.run)
+        this.run = win(this.run, CONFIG, this.ship.profile.hp)
         this.audio.play('win')
         this.setMusic('victory')
         this.finish()
@@ -497,16 +518,42 @@ export class Game implements Arena, Director {
   }
 
   private fire(): void {
-    this.fireCooldown += 1 / CONFIG.weapon.rate
+    const profile = this.ship.profile
+    const weapon = profile.weapon
+    const afterburn = profile.ability.kind === 'afterburn' && this.abilityTime > 0
+    const fireRateBoost = afterburn ? (profile.ability.fireRateBoost ?? 1) : 1
+    this.fireCooldown += 1 / (CONFIG.weapon.rate * weapon.rateMultiplier * fireRateBoost)
     if (this.fireCooldown < 0) this.fireCooldown = 0
-    this.gunSide *= -1
-    const m = this.ship.muzzle(this.gunSide, tmpA)
-    const dir = tmpB.subVectors(this.aimPoint, m).normalize()
-    this.shots.fire(m, dir, CONFIG.weapon.speed, CONFIG.weapon.range / CONFIG.weapon.speed, CONFIG.weapon.damage)
-    this.run = shotFired(this.run)
-    this.fx.muzzle(m, '#ffb347')
-    this.audio.play('shoot')
+    const count = weapon.kind === 'twin' ? 2 : weapon.kind === 'triad' ? 3 : 1
+    for (let i = 0; i < count; i += 1) {
+      const side = weapon.kind === 'twin' ? (i === 0 ? -1 : 1) : 0
+      const angle = weapon.kind === 'triad' ? (i - 1) * weapon.spread : 0
+      const muzzle = this.ship.muzzle(side, tmpA)
+      const dir = tmpB.subVectors(this.aimPoint, muzzle).normalize()
+      if (angle !== 0) dir.applyAxisAngle(WORLD_UP, angle).normalize()
+      this.shots.fire(muzzle, dir, CONFIG.weapon.speed, CONFIG.weapon.range / CONFIG.weapon.speed, CONFIG.weapon.damage * weapon.damageMultiplier, weapon.color)
+      this.fx.muzzle(muzzle, weapon.color)
+    }
+    this.run = shotFired(this.run, count)
+    this.audio.play(weapon.sound)
     this.impact.kick(0, -0.012)
+  }
+
+  private activateAbility(): void {
+    const { ability, weapon } = this.ship.profile
+    this.abilityCooldown = ability.cooldown
+    if (ability.kind === 'afterburn') {
+      this.abilityTime = ability.duration
+    } else if (ability.kind === 'aegis') {
+      this.abilityTime = ability.duration
+      this.run = shield(this.run, ability.duration)
+      this.ship.barrierActive = true
+    } else {
+      this.bullets.clear()
+      if (!this.reducedMotion) this.fx.ring(this.ship.pos, 18, weapon.color, 0.72)
+      this.fx.flare(this.ship.pos, 4.2, weapon.color, 0.28, 1)
+    }
+    this.audio.play(ability.sound)
   }
 
   private stepShots(dt: number): void {
@@ -834,9 +881,11 @@ export class Game implements Arena, Director {
       multiplier: mult,
       combo: r.combo,
       comboFraction: r.combo > 0 ? r.comboTimer / CONFIG.combo.window : 0,
-      hull: r.hull / CONFIG.hull.max,
+      hull: r.hull / this.ship.profile.hp,
       shield: r.shield / CONFIG.shield.max,
       rollReady: this.ship.rollCooldown > 0 ? 1 - this.ship.rollCooldown / (CONFIG.roll.duration + CONFIG.roll.cooldown) : 1,
+      abilityReady: this.abilityCooldown > 0 ? 1 - this.abilityCooldown / this.ship.profile.ability.cooldown : 1,
+      abilityActive: this.abilityTime > 0,
       grazes: r.grazes,
       boss: this.boss.active ? this.boss.health : null,
       reticle: {
@@ -846,7 +895,7 @@ export class Game implements Arena, Director {
         locked: this.locked,
         visible: this.mode === 'playing' && this.ship.alive && this.camMode !== 'launch' && this.camMode !== 'victory',
       },
-      lowHull: r.hull < 30,
+      lowHull: r.hull < this.ship.profile.hp * 0.3,
     }
   }
 

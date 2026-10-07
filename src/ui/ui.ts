@@ -1,11 +1,12 @@
 import type { Audio } from '../engine/audio'
 import type { I18n } from '../engine/i18n'
 import type { Input } from '../engine/input'
-import { insertScore, type Quality, type SaveData, type SaveStore } from '../engine/save'
+import { insertScore, type AircraftClassId, type Quality, type SaveData, type SaveStore } from '../engine/save'
 import type { BannerStyle, HudData, PopupKind } from '../game/game'
+import { AIRCRAFT_CLASSES, isAircraftClassId } from '../game/aircraft'
 import { accuracy, formatClock, type Grade, type RunState } from '../game/rules'
 
-export type Screen = 'boot' | 'title' | 'hud' | 'pause' | 'settings' | 'leaderboard' | 'results'
+export type Screen = 'boot' | 'title' | 'hangar' | 'hud' | 'pause' | 'settings' | 'leaderboard' | 'results'
 
 export type UiActions = {
   play(): void
@@ -13,6 +14,7 @@ export type UiActions = {
   restart(): void
   checkpoint(): void
   quit(): void
+  selectAircraft(id: AircraftClassId): void
   settings(patch: Partial<SaveData>): void
 }
 
@@ -30,6 +32,7 @@ const GLYPH = {
     lmb: `<kbd class="icon">${ICON.lmb}</kbd>`,
     j: '<kbd>J</kbd>',
     k: '<kbd>K</kbd>',
+    e: '<kbd>E</kbd>',
     space: '<kbd class="wide">Space</kbd>',
     select: '<kbd>Enter</kbd>',
     back: '<kbd>Esc</kbd>',
@@ -39,6 +42,7 @@ const GLYPH = {
     rs: '<kbd class="round">R</kbd>',
     rt: '<kbd class="pill">RT</kbd>',
     lt: '<kbd class="pill">LT</kbd>',
+    lb: '<kbd class="pill">LB</kbd>',
     select: '<kbd class="round a">A</kbd>',
     back: '<kbd class="round b">B</kbd>',
   },
@@ -60,6 +64,7 @@ export class Ui {
   private savedRank = -1
   private lastMethod = ''
   private checkpointRun = false
+  private aircraftClass: AircraftClassId = 'wraith'
   private readonly el: Record<string, HTMLElement> = {}
 
   constructor(
@@ -72,6 +77,7 @@ export class Ui {
     this.root = document.getElementById('ui')!
     this.root.insertAdjacentHTML('beforeend', this.template())
     for (const node of this.root.querySelectorAll<HTMLElement>('[data-el]')) this.el[node.dataset.el!] = node
+    this.aircraftClass = save.data.aircraftClass
     this.el.bootRetry.addEventListener('click', () => window.location.reload())
     this.root.addEventListener('click', e => this.onClick(e))
     this.root.addEventListener('input', e => this.onInput(e))
@@ -146,6 +152,18 @@ export class Ui {
     this.el.bootRetry.hidden = !visible
   }
 
+  setAircraftClass(id: AircraftClassId): void {
+    this.aircraftClass = id
+    const profile = AIRCRAFT_CLASSES[id]
+    for (const card of this.qa<HTMLButtonElement>('[data-aircraft]')) {
+      const selected = card.dataset.aircraft === id
+      card.setAttribute('aria-pressed', String(selected))
+      card.classList.toggle('is-selected', selected)
+    }
+    this.el.abilityName.textContent = this.i18n.t(profile.ability.nameKey)
+    this.el.abilityPip.style.setProperty('--ability-color', profile.weapon.color)
+  }
+
   // ─── HUD ────────────────────────────────────────────────────────────────
   updateHud(h: HudData): void {
     if (this.changed('score', h.score)) this.el.score.textContent = h.score.toLocaleString('en-US')
@@ -168,6 +186,13 @@ export class Ui {
     this.el.status.classList.toggle('shield-down', h.shield <= 0.01)
     this.el.rollPip.style.setProperty('--ready', h.rollReady.toFixed(3))
     this.el.rollPip.classList.toggle('is-ready', h.rollReady >= 1)
+    this.el.abilityTrack.style.transform = `scaleX(${h.abilityReady.toFixed(3)})`
+    this.el.abilityTrack.parentElement!.setAttribute('aria-valuenow', String(Math.round(h.abilityReady * 100)))
+    this.el.abilityPip.classList.toggle('is-ready', h.abilityReady >= 1)
+    this.el.abilityPip.classList.toggle('is-active', h.abilityActive)
+    const abilityKey = this.input.method === 'gamepad' ? 'LB' : 'E'
+    if (this.changed('abilityKey', abilityKey)) this.el.abilityKey.textContent = abilityKey
+    this.el.abilityState.textContent = this.i18n.t(h.abilityActive ? 'hud.abilityActive' : h.abilityReady >= 1 ? 'hud.abilityReady' : 'hud.abilityCharging')
     // Boss bar.
     const b = h.boss
     this.el.bossBar.classList.toggle('is-active', !!b && this.cache.get('bossOn') === true)
@@ -409,6 +434,15 @@ export class Ui {
     if (action && action !== 'pause') this.audio.play('uiConfirm')
     switch (action) {
       case 'play': this.actions.play(); break
+      case 'hangar': this.push('hangar'); break
+      case 'select-aircraft': {
+        const id = target.dataset.aircraft
+        if (isAircraftClassId(id)) {
+          this.actions.selectAircraft(id)
+          this.setAircraftClass(id)
+        }
+        break
+      }
       case 'resume': this.actions.resume(); break
       case 'restart': this.actions.restart(); break
       case 'checkpoint': this.actions.checkpoint(); break
@@ -430,7 +464,7 @@ export class Ui {
 
   private onKey(e: KeyboardEvent): void {
     if (this.screen === 'hud' || this.screen === 'boot') return
-    if (this.screen === 'title' && e.code === 'Space' && !e.repeat) {
+    if ((this.screen === 'title' || this.screen === 'hangar') && e.code === 'Space' && !e.repeat) {
       e.preventDefault()
       this.audio.unlock()
       this.audio.play('uiConfirm')
@@ -523,6 +557,7 @@ export class Ui {
     this.renderPrompts()
     this.renderHint()
     this.renderControls()
+    this.setAircraftClass(this.aircraftClass)
     if (this.screen === 'title') this.renderBest()
     if (this.screen === 'leaderboard') this.renderLeaderboard()
     this.cache.delete('bossPhase')
@@ -539,6 +574,7 @@ export class Ui {
         <p>${k.keys}<span>${t('controls.move')}</span></p>
         <p>${k.lmb}${k.j}<span>${t('controls.fire')}</span></p>
         <p>${k.space}${k.k}<span>${t('controls.roll')}</span></p>
+        <p>${k.e}<span>${t('controls.ability')}</span></p>
         <p><kbd>Esc</kbd><span>${t('controls.pause')}</span></p>
       </div>
       <div class="ctl-col"><h4>${t('controls.pad')}</h4>
@@ -546,6 +582,7 @@ export class Ui {
         <p>${p.rs}<span>${t('controls.aim')}</span></p>
         <p>${p.rt}<span>${t('controls.fire')}</span></p>
         <p>${p.lt}<span>${t('controls.roll')}</span></p>
+        <p>${p.lb}<span>${t('controls.ability')}</span></p>
         <p><kbd class="pill">START</kbd><span>${t('controls.pause')}</span></p>
       </div>`
   }
@@ -589,6 +626,7 @@ export class Ui {
     <p class="tagline" data-i18n="game.tagline"></p>
     <nav class="menu">
       <button data-nav class="btn btn-primary" data-action="play"><span data-i18n="menu.play"></span></button>
+      <button data-nav class="btn" data-action="hangar"><span data-i18n="menu.hangar"></span></button>
       <button data-nav class="btn" data-action="leaderboard"><span data-i18n="menu.leaderboard"></span></button>
       <button data-nav class="btn" data-action="settings"><span data-i18n="menu.settings"></span></button>
     </nav>
@@ -596,6 +634,44 @@ export class Ui {
   </div>
   <aside class="controls-card"><h3 data-i18n="controls.title"></h3><div class="controls-grid" data-el="controls"></div></aside>
   <footer class="bottom-bar"><div class="prompts"></div><small data-i18n="credits.fonts"></small></footer>
+</section>
+
+<section class="screen screen-modal screen-hangar" data-screen="hangar">
+  <div class="modal modal-hangar">
+    <header class="hangar-header">
+      <p class="hangar-eyebrow" data-i18n="hangar.eyebrow"></p>
+      <h2 class="modal-title" data-i18n="hangar.title"></h2>
+      <p class="hangar-sub" data-i18n="hangar.sub"></p>
+    </header>
+    <div class="aircraft-grid">
+      <button data-nav type="button" class="aircraft-card" data-action="select-aircraft" data-aircraft="wraith" aria-pressed="false">
+        <span class="aircraft-role" data-i18n="aircraft.wraith.role"></span>
+        <h3 data-i18n="aircraft.wraith.name"></h3>
+        <div class="aircraft-stats"><span><small data-i18n="hangar.hp"></small><b>80</b></span><span><small data-i18n="hangar.speed"></small><b>1.25×</b></span></div>
+        <div class="aircraft-detail"><small data-i18n="hangar.weapon"></small><b data-i18n="aircraft.wraith.weapon"></b><p data-i18n="aircraft.wraith.weaponDesc"></p></div>
+        <div class="aircraft-detail"><small data-i18n="hangar.ability"></small><b data-i18n="aircraft.wraith.ability"></b><p data-i18n="aircraft.wraith.abilityDesc"></p></div>
+        <span class="aircraft-selected" data-i18n="hangar.selected"></span>
+      </button>
+      <button data-nav type="button" class="aircraft-card" data-action="select-aircraft" data-aircraft="bulwark" aria-pressed="false">
+        <span class="aircraft-role" data-i18n="aircraft.bulwark.role"></span>
+        <h3 data-i18n="aircraft.bulwark.name"></h3>
+        <div class="aircraft-stats"><span><small data-i18n="hangar.hp"></small><b>140</b></span><span><small data-i18n="hangar.speed"></small><b>0.78×</b></span></div>
+        <div class="aircraft-detail"><small data-i18n="hangar.weapon"></small><b data-i18n="aircraft.bulwark.weapon"></b><p data-i18n="aircraft.bulwark.weaponDesc"></p></div>
+        <div class="aircraft-detail"><small data-i18n="hangar.ability"></small><b data-i18n="aircraft.bulwark.ability"></b><p data-i18n="aircraft.bulwark.abilityDesc"></p></div>
+        <span class="aircraft-selected" data-i18n="hangar.selected"></span>
+      </button>
+      <button data-nav type="button" class="aircraft-card" data-action="select-aircraft" data-aircraft="tempest" aria-pressed="false">
+        <span class="aircraft-role" data-i18n="aircraft.tempest.role"></span>
+        <h3 data-i18n="aircraft.tempest.name"></h3>
+        <div class="aircraft-stats"><span><small data-i18n="hangar.hp"></small><b>100</b></span><span><small data-i18n="hangar.speed"></small><b>1.00×</b></span></div>
+        <div class="aircraft-detail"><small data-i18n="hangar.weapon"></small><b data-i18n="aircraft.tempest.weapon"></b><p data-i18n="aircraft.tempest.weaponDesc"></p></div>
+        <div class="aircraft-detail"><small data-i18n="hangar.ability"></small><b data-i18n="aircraft.tempest.ability"></b><p data-i18n="aircraft.tempest.abilityDesc"></p></div>
+        <span class="aircraft-selected" data-i18n="hangar.selected"></span>
+      </button>
+    </div>
+    <nav class="menu menu-row"><button data-nav class="btn" data-action="back"><span data-i18n="menu.back"></span></button><button data-nav class="btn btn-primary" data-action="play"><span data-i18n="menu.play"></span></button></nav>
+  </div>
+  <footer class="bottom-bar"><div class="prompts"></div></footer>
 </section>
 
 <section class="screen screen-hud" data-screen="hud">
@@ -628,6 +704,7 @@ export class Ui {
     <div class="bar-row shield"><span class="hud-label" data-i18n="hud.shield"></span><div class="bar"><i data-el="shieldBar"></i></div><b data-el="shieldN">100</b></div>
     <div class="bar-row hull"><span class="hud-label" data-i18n="hud.hull"></span><div class="bar"><i data-el="hullBar"></i></div><b data-el="hullN">100</b></div>
     <div class="roll-pip" data-el="rollPip"><span data-i18n="hud.roll"></span></div>
+    <div class="ability-pip" data-el="abilityPip"><span class="ability-copy"><small data-i18n="hud.ability"></small><b data-el="abilityName"></b></span><div class="ability-track-wrap" role="progressbar" aria-label="Aircraft ability cooldown" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i class="ability-track" data-el="abilityTrack"></i></div><b class="ability-state" data-el="abilityState" data-i18n="hud.abilityReady"></b><kbd data-el="abilityKey">E</kbd></div>
     <div class="low-hull" data-i18n="hud.lowHull"></div>
   </div>
   <div class="banner" data-el="banner"><div class="banner-title" data-el="bannerTitle"></div><div class="banner-sub" data-el="bannerSub"></div></div>

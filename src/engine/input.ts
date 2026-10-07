@@ -5,18 +5,19 @@
  *
  * Bindings
  *   Keyboard/mouse: WASD/arrows steer, mouse aims (pointer lock gives relative aim), left mouse
- *                   or J fires, Space / K / right mouse rolls, Esc/P pauses.
- *   Gamepad:        left stick steers, right stick aims, RT/RB/A fire, LT/LB/X roll, Start pauses.
+ *                   or J fires, Space / K / right mouse rolls, E activates the aircraft ability, Esc/P pauses.
+ *   Gamepad:        left stick steers, right stick aims, RT/RB/A fire, LT/X roll, LB ability, Start pauses.
  *   Touch:          on-screen stick steers, FIRE and ROLL buttons (see ui/touch.ts).
  *
  * Call `update()` once per rendered frame before gameplay and `endFrame()` after it.
  */
-export type Action = 'fire' | 'roll' | 'pause' | 'confirm' | 'back' | 'skip'
+export type Action = 'fire' | 'roll' | 'ability' | 'pause' | 'confirm' | 'back' | 'skip'
 export type InputMethod = 'keyboard' | 'gamepad' | 'touch'
 
 const KEY_BINDINGS: Record<Action, string[]> = {
   fire: ['KeyJ'],
   roll: ['Space', 'KeyK'],
+  ability: ['KeyE'],
   pause: ['Escape', 'KeyP'],
   confirm: ['Enter', 'NumpadEnter'],
   back: [],
@@ -24,7 +25,7 @@ const KEY_BINDINGS: Record<Action, string[]> = {
 }
 const MOVE_KEYS = { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'] }
 // Standard mapping: A=0 B=1 X=2 Y=3 LB=4 RB=5 LT=6 RT=7 Back=8 Start=9.
-const PAD_BINDINGS: Record<Action, number[]> = { fire: [7, 5, 0], roll: [6, 4, 2], pause: [9], confirm: [0], back: [1], skip: [8, 3] }
+const PAD_BINDINGS: Record<Action, number[]> = { fire: [7, 5, 0], roll: [6, 2], ability: [4], pause: [9], confirm: [0], back: [1], skip: [8, 3] }
 
 export class Input {
   /** Steering intent in [-1, 1]: x = right, y = up. */

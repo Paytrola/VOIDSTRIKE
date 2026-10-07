@@ -210,12 +210,12 @@ export class EnemyBullets {
 
 const WHITE = new THREE.Color('#ffffff')
 
-export type Shot = { pos: THREE.Vector3; prev: THREE.Vector3; vel: THREE.Vector3; life: number; damage: number }
+export type Shot = { pos: THREE.Vector3; prev: THREE.Vector3; vel: THREE.Vector3; life: number; damage: number; color: THREE.Color }
 
 /** Player bolts: stretched gold tracers with glow heads; hits are resolved by the scene. */
 export class PlayerShots {
   readonly group = new THREE.Group()
-  readonly pool = new ObjectPool<Shot>(() => ({ pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, damage: 1 }), 240, 240)
+  readonly pool = new ObjectPool<Shot>(() => ({ pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, damage: 1, color: new THREE.Color('#ffb347') }), 240, 240)
   private readonly bolt: InstancedBatch
   private readonly glow: InstancedBatch
   private readonly q = new THREE.Quaternion()
@@ -225,16 +225,16 @@ export class PlayerShots {
   readonly camQuat = new THREE.Quaternion()
 
   constructor() {
-    const boltMat = new THREE.MeshBasicMaterial({ color: '#ffe3a0', toneMapped: false, fog: false, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })
-    this.bolt = new InstancedBatch(new THREE.BoxGeometry(1, 1, 1), boltMat, 240)
-    const glowMat = new THREE.MeshBasicMaterial({ map: glowTexture(), color: '#ff9a3a', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, fog: false })
-    this.glow = new InstancedBatch(new THREE.PlaneGeometry(1, 1), glowMat, 240)
+    const boltMat = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, fog: false, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })
+    this.bolt = new InstancedBatch(new THREE.BoxGeometry(1, 1, 1), boltMat, 240, { colors: true })
+    const glowMat = new THREE.MeshBasicMaterial({ map: glowTexture(), color: '#ffffff', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, fog: false })
+    this.glow = new InstancedBatch(new THREE.PlaneGeometry(1, 1), glowMat, 240, { colors: true })
     this.bolt.mesh.renderOrder = 7
     this.glow.mesh.renderOrder = 8
     this.group.add(this.bolt.mesh, this.glow.mesh)
   }
 
-  fire(from: THREE.Vector3, dir: THREE.Vector3, speed: number, life: number, damage: number): Shot | undefined {
+  fire(from: THREE.Vector3, dir: THREE.Vector3, speed: number, life: number, damage: number, color: THREE.ColorRepresentation = '#ffb347'): Shot | undefined {
     const s = this.pool.acquire()
     if (!s) return undefined
     s.pos.copy(from)
@@ -242,6 +242,7 @@ export class PlayerShots {
     s.vel.copy(dir).multiplyScalar(speed)
     s.life = life
     s.damage = damage
+    s.color.set(color)
     return s
   }
 
@@ -256,8 +257,8 @@ export class PlayerShots {
       this.d.lerpVectors(s.prev, s.pos, alpha)
       this.q.setFromUnitVectors(this.z, this.s.copy(s.vel).normalize())
       this.s.set(0.16, 0.16, 4.2)
-      this.bolt.push(this.d, this.q, this.s)
-      this.glow.push(this.d, this.camQuat, 1.5)
+      this.bolt.push(this.d, this.q, this.s, s.color)
+      this.glow.push(this.d, this.camQuat, 1.5, s.color)
     }
     this.bolt.end()
     this.glow.end()

@@ -76,6 +76,15 @@ describe('run rules', () => {
     expect(s.shield).toBe(CONFIG.shield.max)
   })
 
+  it('applies a selected aircraft hull maximum to starts, repairs and fair end bonuses', () => {
+    const hullMax = 140
+    const started = createRun(CONFIG, hullMax)
+    expect(started.hull).toBe(hullMax)
+    expect(repair({ ...started, hull: 100 }, 80, 0, CONFIG, hullMax).hull).toBe(hullMax)
+    const finished = win({ ...started, hull: 70 }, CONFIG, hullMax)
+    expect(finished.hullBonus).toBe(Math.round((70 / hullMax) * CONFIG.hull.max) * CONFIG.score.hullBonus)
+  })
+
   it('adds clear, hull and flawless bonuses on win and grades the run', () => {
     const s = win(addKill(createRun(), 1000).state)
     expect(s.phase).toBe('won')

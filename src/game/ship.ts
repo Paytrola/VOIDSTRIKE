@@ -1,5 +1,8 @@
 import * as THREE from 'three'
 import { CONFIG } from './config'
+import { AIRCRAFT_CLASSES } from './aircraft'
+import type { AircraftClassId } from '../engine/save'
+import type { AircraftProfile } from './aircraft'
 import { buildHeliospur } from './models'
 import { glowTexture } from './textures'
 
@@ -76,6 +79,10 @@ export class Ship {
   private shieldFlash = 0
   private hitFlash = 0
   private readonly bodyMat: THREE.MeshStandardMaterial
+  private readonly glowMat: THREE.MeshBasicMaterial
+  private readonly flameMat: THREE.MeshBasicMaterial
+  private aircraftId: AircraftClassId = 'wraith'
+  barrierActive = false
   private readonly tip = new THREE.Vector3()
   private readonly tmp = new THREE.Vector3()
   private readonly render = new THREE.Vector3()
@@ -88,11 +95,12 @@ export class Ship {
     const parts = buildHeliospur()
     this.bodyMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.42, metalness: 0.25, emissive: '#000000' })
     const body = new THREE.Mesh(parts.body, this.bodyMat)
-    const glow = new THREE.Mesh(parts.glow, new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }))
+    this.glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false })
+    const glow = new THREE.Mesh(parts.glow, this.glowMat)
     this.model.add(body, glow)
-    const flameMat = new THREE.MeshBasicMaterial({ color: '#4fc8ff', blending: THREE.AdditiveBlending, transparent: true, opacity: 0.75, depthWrite: false, toneMapped: false })
+    this.flameMat = new THREE.MeshBasicMaterial({ color: '#4fc8ff', blending: THREE.AdditiveBlending, transparent: true, opacity: 0.75, depthWrite: false, toneMapped: false })
     for (const x of [-0.55, 0.55, 0]) {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(x === 0 ? 0.2 : 0.17, 1, 6, 1, true), flameMat)
+      const f = new THREE.Mesh(new THREE.ConeGeometry(x === 0 ? 0.2 : 0.17, 1, 6, 1, true), this.flameMat)
       f.geometry.translate(0, -0.5, 0)
       f.rotation.x = -Math.PI / 2
       f.position.set(x, x === 0 ? 0 : -0.18, 1.5)
@@ -128,6 +136,7 @@ export class Ship {
     this.vel.set(0, 0, 0)
     this.rollTime = 0
     this.rollCooldown = 0
+    this.barrierActive = false
     this.rollAngle = 0
     this.alive = true
     this.model.visible = true
@@ -158,12 +167,12 @@ export class Ship {
         const ty = THREE.MathUtils.clamp(follow.y, -c.boundsY, c.boundsY)
         const dvx = ((tx - this.pos.x) * k) / dt
         const dvy = ((ty - this.pos.y) * k) / dt
-        const max = c.speed * 1.35
+        const max = c.speed * this.profile.speedMultiplier * speedScale * 1.35
         this.vel.x = THREE.MathUtils.clamp(dvx, -max, max)
         this.vel.y = THREE.MathUtils.clamp(dvy, -max, max)
       } else {
-        const tx = move.x * c.speed * speedScale
-        const ty = move.y * c.speed * speedScale
+        const tx = move.x * c.speed * this.profile.speedMultiplier * speedScale
+        const ty = move.y * c.speed * this.profile.speedMultiplier * speedScale
         const a = c.accel * dt
         this.vel.x += THREE.MathUtils.clamp(tx - this.vel.x, -a, a)
         this.vel.y += THREE.MathUtils.clamp(ty - this.vel.y, -a, a)
@@ -236,7 +245,7 @@ export class Ship {
     this.shieldFlash = Math.max(0, this.shieldFlash - frameSeconds * 3.5)
     this.hitFlash = Math.max(0, this.hitFlash - frameSeconds * 5)
     const sm = this.shieldMesh.material as THREE.MeshBasicMaterial
-    sm.opacity = this.shieldFlash * 0.85
+    sm.opacity = Math.max(this.shieldFlash * 0.85, this.barrierActive ? 0.34 : 0)
     this.shieldMesh.rotation.y += frameSeconds * 2
     this.shieldMesh.visible = sm.opacity > 0.01
     this.bodyMat.emissive.setRGB(this.hitFlash * 1.5, this.hitFlash * 0.4, this.hitFlash * 0.3)
@@ -256,5 +265,20 @@ export class Ship {
 
   get position(): THREE.Vector3 {
     return this.tmp.copy(this.pos)
+  }
+
+  get profile(): AircraftProfile {
+    return AIRCRAFT_CLASSES[this.aircraftId]
+  }
+
+  setAircraftClass(id: AircraftClassId): void {
+    this.aircraftId = id
+    const profile = this.profile
+    const tint = new THREE.Color(profile.tint)
+    this.bodyMat.color.copy(tint)
+    this.glowMat.color.copy(tint)
+    this.flameMat.color.set(profile.weapon.color)
+    ;(this.flameGlow.material as THREE.SpriteMaterial).color.set(profile.weapon.color)
+    ;(this.shieldMesh.material as THREE.MeshBasicMaterial).color.set(profile.weapon.color)
   }
 }

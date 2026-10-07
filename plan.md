@@ -50,3 +50,16 @@ The first playable preview/checkpoint needs a VOIDSTRIKE-specific loading screen
 ## User-reported startup stall
 
 The user supplied a screenshot of the initial VOIDSTRIKE loader paused at roughly one-third with “Charging reactor.” The existing boot bar advances only when each of four startup promises completes, so a slow module load can look frozen; the loader currently has no timeout or recovery control while a promise remains pending. Keep normal determinate progress, switch to an indeterminate bar and a polite slow-start status after 10 seconds, expose a working Retry control after 30 seconds, and cancel the watchdog on successful boot or the existing error handler. Late successful startup must still proceed to the title screen. Validate the strings, TypeScript, regression suite, production build, and the managed preview; exercise the stall presentation with a controlled browser-state check.
+
+## Aircraft classes and in-game SFX expansion
+
+Keep the existing user-supplied Operation Cryo Intro file as the looping title-menu track; the newly attached copy is byte-identical to the project asset. Extend the existing synthesized game-SFX mixer rather than adding unrelated audio assets. Preserve current impact, explosion, pickup, roll and boss cues, and add distinct weapon and activated-ability cues routed through the saved SFX volume/mute controls.
+
+Add a keyboard/gamepad-accessible Hangar from the title screen. The pilot can select and immediately save one of three classes; older saves missing the new field default to Wraith. Each card lists HP, speed, weapon and ability, and the same chosen class is applied by both title Deploy and Space-to-deploy. In flight, **E** (gamepad **LB**) activates the ability; the HUD displays ability readiness/cooldown. Preserve inherited touch behavior without adding a new touch action.
+
+Class balance and behavior:
+- **Wraith / Interceptor:** 80 HP, 1.25× movement speed; Twin Pulse fires a paired 0.55×-damage shot at the standard base fire rate; Afterburn boosts movement and fire rate for 2.5 seconds, with a 12-second cooldown.
+- **Bulwark / Gunship:** 140 HP, 0.78× movement speed; Siege Cannon fires one 2.2×-damage shot at 0.45× fire rate; Aegis Field grants 2.4 seconds of damage immunity, with an 18-second cooldown.
+- **Tempest / Striker:** 100 HP, 1.0× movement speed; Triad Spread fires three 0.48×-damage shots at 0.70× fire rate across a fan; EMP Pulse clears active hostile bullets, with a 20-second cooldown.
+
+Keep these profile multipliers layered over the existing global combat configuration so the preserved development Tweak controls still have real consumers and the existing tuned-run eligibility latch remains authoritative. Pass each class's HP maximum through run initialization, repairs/checkpoint restoration and the HUD fraction. Use class/weapon accent colors to distinguish aircraft and projectiles while retaining the supplied source-game 3D model; no additional 3D model production or external backend is needed. Keep the established English-only interface and offline game architecture.

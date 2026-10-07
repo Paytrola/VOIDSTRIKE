@@ -33,12 +33,12 @@ export type RunState = {
   noDamageBonus: number
 }
 
-export function createRun(rules = CONFIG): RunState {
+export function createRun(rules = CONFIG, hullMax: number = rules.hull.max): RunState {
   return {
     phase: 'playing',
     unranked: false,
     score: 0,
-    hull: rules.hull.max,
+    hull: hullMax,
     shield: rules.shield.max,
     shieldDelay: 0,
     invulnerable: 0,
@@ -130,9 +130,9 @@ export function hurt(s: RunState, amount: number, rules = CONFIG): HurtResult {
   return { state: next, blocked: false, shieldDamage, hullDamage, died }
 }
 
-export function repair(s: RunState, hull: number, shield: number, rules = CONFIG): RunState {
+export function repair(s: RunState, hull: number, shield: number, rules = CONFIG, hullMax: number = rules.hull.max): RunState {
   if (s.phase !== 'playing') return s
-  return { ...s, hull: Math.min(rules.hull.max, s.hull + hull), shield: Math.min(rules.shield.max, s.shield + shield) }
+  return { ...s, hull: Math.min(hullMax, s.hull + hull), shield: Math.min(rules.shield.max, s.shield + shield) }
 }
 
 export function shotFired(s: RunState, n = 1): RunState {
@@ -149,10 +149,10 @@ export function shield(s: RunState, seconds: number): RunState {
 }
 
 /** The boss fell: add clear, hull and flawless bonuses and end the run. */
-export function win(s: RunState, rules = CONFIG): RunState {
+export function win(s: RunState, rules = CONFIG, hullMax: number = rules.hull.max): RunState {
   if (s.phase !== 'playing') return s
   const clearBonus = rules.score.clear
-  const hullBonus = Math.round(s.hull) * rules.score.hullBonus
+  const hullBonus = Math.round((s.hull / Math.max(1, hullMax)) * rules.hull.max) * rules.score.hullBonus
   const noDamageBonus = s.damageTaken === 0 ? rules.score.noDamage : 0
   return { ...s, phase: 'won', clearBonus, hullBonus, noDamageBonus, score: s.score + clearBonus + hullBonus + noDamageBonus }
 }

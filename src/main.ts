@@ -95,6 +95,10 @@ async function boot(): Promise<void> {
       applySettings(save.data)
       if (qualityChanged) game?.setQuality(save.data.quality)
     },
+    selectAircraft: id => {
+      save.update({ aircraftClass: id })
+      game?.setAircraftClass(id)
+    },
   })
   ui.show('boot')
   applySettings(save.data)
@@ -154,6 +158,7 @@ async function boot(): Promise<void> {
   })
   game.reducedMotion = save.data.reducedMotion
   const g = game
+  g.setAircraftClass(save.data.aircraftClass)
   if (import.meta.env.DEV) {
     const [{ registerGameTuning }, { tuning }] = await Promise.all([
       import('../scripts/manus-tuning/adapter.js'), import('./game/tuning'),

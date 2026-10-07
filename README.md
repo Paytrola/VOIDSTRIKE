@@ -9,7 +9,7 @@ deep-core mining platform, across three phases.
 pnpm install
 pnpm dev      # dev server
 pnpm build    # typecheck + production build + bundle budget
-pnpm test     # unit tests (rules, timeline, impact toolkit, save, i18n)
+pnpm test     # unit tests (rules, timeline, impact toolkit, aircraft, save, i18n)
 pnpm smoke    # after build: headless playthrough to Results + screenshots in shots/
 ```
 
@@ -21,8 +21,21 @@ pnpm smoke    # after build: headless playthrough to Results + screenshots in sh
 | Fly | Mouse steers (ship follows the reticle) or WASD | Left stick | Left floating stick |
 | Aim | Mouse | Right stick | Reticle rides ahead of the ship, with aim assist |
 | Fire | Left button or J | RT | FIRE button |
+| Activate aircraft ability | E | LB | — |
 | Roll dodge (i-frames, in flight) | Space or K | LT | ROLL button |
 | Pause | Esc | Start | Pause button |
+
+Open **Aircraft Hangar** from the title menu to choose an airframe; selection is saved between sessions. Space still deploys directly with the currently selected aircraft.
+
+## Aircraft classes
+
+| Class | Hull | Speed | Weapon | Ability |
+| --- | ---: | ---: | --- | --- |
+| **Wraith** — interceptor | 80 HP | 1.25× | Twin Pulse: two quick shots | Afterburn: 2.5 s speed/fire-rate boost, 12 s cooldown |
+| **Bulwark** — gunship | 140 HP | 0.78× | Siege Cannon: slow, heavy slug | Aegis Field: 2.4 s damage immunity, 18 s cooldown |
+| **Tempest** — striker | 100 HP | 1.00× | Triad Spread: three-shot fan | EMP Pulse: clears active hostile shots, 20 s cooldown |
+
+Each aircraft has a distinct shot color, weapon sound and ability sound. The existing hit, explosion, pickup, roll and boss cues remain active through the saved SFX-volume setting.
 
 ## The level
 
@@ -53,13 +66,13 @@ Score = kills × chain multiplier + grazes + clear and hull bonuses. Results sho
 | `src/engine/renderer.ts` | WebGL renderer, quality tiers, bloom + post (aberration, zoom, tint, vignette) |
 | `src/engine/audio.ts`, `music.ts` | Mixer buses, synthesized SFX recipes, step-sequenced in-run music and the supplied menu track |
 | `src/engine/save.ts`, `i18n.ts` | Versioned local save + leaderboard; English-only player interface |
-| `src/game/config.ts` | All tuning numbers |
+| `src/game/config.ts`, `aircraft.ts` | Global tuning plus Wraith, Bulwark and Tempest class profiles |
 | `src/game/rules.ts` | Pure hull/shield/combo/score/grade rules (unit tested) |
 | `src/game/level.ts` | The whole level as one timeline script |
 | `src/game/boss.ts` | BOREWARDEN: model, parts, phase timelines and attack verbs |
 | `src/game/enemies.ts`, `bullets.ts`, `fx.ts` | Pooled + instanced enemies, bullet patterns, particles |
 | `src/game/ship.ts`, `rail.ts`, `env.ts`, `models.ts` | Player ship, rail spline + camera frame, sky/asteroids/speed field, procedural low-poly models |
-| `src/ui/`, `src/styles/main.css` | HTML/CSS game UI (title, HUD, pause, settings, leaderboard, results) and touch controls |
+| `src/ui/`, `src/styles/main.css` | HTML/CSS game UI (title, aircraft Hangar, HUD, pause, settings, leaderboard, results) and inherited touch controls |
 | `src/i18n/en.json` | All active player-facing text |
 | `assets/audio/Operation_Cryo_Intro_music_BRM5_KLICKAUD.mp3` | Supplied source track; loaded from project storage for the menu |
 

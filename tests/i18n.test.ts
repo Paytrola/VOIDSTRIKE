@@ -28,4 +28,14 @@ describe('i18n', () => {
     expect(en['menu.deployPrefix']).toBe('PRESS')
     expect(en['menu.deployPrompt']).toBe('TO DEPLOY')
   })
+
+  it('provides English Hangar and active-ability copy for all aircraft', () => {
+    expect(en['menu.hangar']).toBe('Aircraft Hangar')
+    for (const id of ['wraith', 'bulwark', 'tempest']) {
+      expect(en[`aircraft.${id}.name` as keyof typeof en]).toBeTruthy()
+      expect(en[`aircraft.${id}.weapon` as keyof typeof en]).toBeTruthy()
+      expect(en[`aircraft.${id}.ability` as keyof typeof en]).toBeTruthy()
+    }
+    expect(en['controls.ability']).toContain('ability')
+  })
 })

@@ -17,6 +17,18 @@ describe('save', () => {
     expect(s.quality).toBe('high')
     expect(s.sensitivity).toBe(1)
     expect(s.playerName).toBe('a very long play')
+    expect(s.aircraftClass).toBe('wraith')
+  })
+
+  it('migrates missing or invalid aircraft IDs and persists valid class choices', () => {
+    expect(parseSave(JSON.stringify({ version: 1 })).aircraftClass).toBe('wraith')
+    expect(parseSave(JSON.stringify({ version: 1, aircraftClass: 'unknown' })).aircraftClass).toBe('wraith')
+    expect(parseSave(JSON.stringify({ version: 1, aircraftClass: 'tempest' })).aircraftClass).toBe('tempest')
+    const mem = new Map<string, string>()
+    const storage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) }
+    const store = new SaveStore(storage)
+    store.update({ aircraftClass: 'bulwark' })
+    expect(new SaveStore(storage).data.aircraftClass).toBe('bulwark')
   })
 
   it('keeps a bounded, ordered leaderboard', () => {

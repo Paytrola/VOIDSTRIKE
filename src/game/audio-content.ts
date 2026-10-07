@@ -7,6 +7,27 @@ export function defineSounds(a: Audio): void {
     au.tone({ freq: 1250, to: 380, dur: 0.07, type: 'square', vol: 0.045, filter: 3800 })
     au.noise({ dur: 0.04, vol: 0.05, from: 7000, to: 2500, filterType: 'bandpass' })
   }, 0.045)
+  a.define('siegeShot', au => {
+    au.tone({ freq: 180, to: 72, dur: 0.18, type: 'sawtooth', vol: 0.16, filter: 950 })
+    au.noise({ dur: 0.1, vol: 0.12, from: 1300, to: 260, filterType: 'lowpass' })
+  }, 0.12)
+  a.define('triadShot', au => {
+    au.tone({ freq: 980, to: 570, dur: 0.07, type: 'triangle', vol: 0.055, pan: -0.28 })
+    au.tone({ freq: 1080, to: 630, dur: 0.07, type: 'triangle', vol: 0.055 })
+    au.tone({ freq: 1180, to: 690, dur: 0.07, type: 'triangle', vol: 0.055, pan: 0.28 })
+  }, 0.06)
+  a.define('abilityBoost', au => {
+    au.noise({ dur: 0.28, vol: 0.15, from: 520, to: 4200, filterType: 'bandpass', q: 1.4 })
+    au.tone({ freq: 280, to: 1120, dur: 0.32, type: 'sawtooth', vol: 0.09, filter: 2600 })
+  }, 0.28)
+  a.define('abilityAegis', au => {
+    au.tone({ freq: 190, to: 680, dur: 0.24, type: 'sine', vol: 0.13, echo: 0.3 })
+    au.tone({ freq: 380, to: 1220, dur: 0.28, type: 'triangle', vol: 0.09, delay: 0.06 })
+  }, 0.24)
+  a.define('abilityEMP', au => {
+    au.tone({ freq: 115, to: 1450, dur: 0.42, type: 'sawtooth', vol: 0.16, filter: 3000 })
+    au.noise({ dur: 0.36, vol: 0.16, from: 300, to: 8200, filterType: 'bandpass', q: 0.9, delay: 0.04 })
+  }, 0.4)
   a.define('hit', au => au.tone({ freq: 900 + Math.random() * 200, to: 300, dur: 0.05, type: 'triangle', vol: 0.09 }), 0.03)
   a.define('hitRock', au => au.noise({ dur: 0.06, vol: 0.1, from: 1800, to: 500 }), 0.04)
   a.define('hitBoss', au => {
