@@ -17,8 +17,9 @@ import { Enemies, ENEMY_STATS, type Enemy, type SpawnSpec } from './enemies'
 import { Environment, SpeedField } from './env'
 import { Fx } from './fx'
 import { buildStage, type Director } from './level'
+import { collectPowerup, POWERUP_COLORS } from './powerups'
 import { Rail } from './rail'
-import { addKill, addScore, createRun, graze, grade, hurt, repair, shield, shotFired, shotHit, tick, win, type Grade, type RunState } from './rules'
+import { addKill, addScore, createRun, graze, grade, hurt, shield, shotFired, shotHit, tick, win, type Grade, type RunState } from './rules'
 import { Ship } from './ship'
 import { tuning } from './tuning'
 
@@ -49,6 +50,7 @@ export type HudData = {
   rollReady: number
   abilityReady: number
   abilityActive: boolean
+  weaponBoost: { remaining: number; fraction: number }
   grazes: number
   boss: { phase: number; fraction: number; total: number } | null
   reticle: { x: number; y: number; inner: { x: number; y: number }; locked: boolean; visible: boolean }
@@ -89,6 +91,7 @@ export class Game implements Arena, Director {
   private fireCooldown = 0
   private abilityCooldown = 0
   private abilityTime = 0
+  private weaponBoostTime = 0
   private boost = 0
   private boostTarget = 0
   private camMode: CamMode = 'title'
@@ -314,6 +317,7 @@ export class Game implements Arena, Director {
     this.fireCooldown = 0
     this.abilityCooldown = 0
     this.abilityTime = 0
+    this.weaponBoostTime = 0
     this.boost = this.boostTarget = 0
     this.bullets.speedScale = 1
   }
@@ -392,11 +396,14 @@ export class Game implements Arena, Director {
   }
 
   private onCollected(e: Enemy): void {
-    this.run = repair(this.run, CONFIG.repair.hull, CONFIG.repair.shield, CONFIG, this.ship.profile.hp)
+    const pickup = collectPowerup(this.run, e.pickupType, this.ship.profile.hp, this.weaponBoostTime)
+    this.run = pickup.run
+    this.weaponBoostTime = pickup.weaponBoostSeconds
+    const color = POWERUP_COLORS[e.pickupType]
     this.audio.play('pickup')
-    this.fx.ring(e.pos, 5, '#9dff5c', 0.4)
-    this.fx.flare(e.pos, 4, '#9dff5c', 0.3)
-    this.popupAt('pickup.repair', this.ship.pos, 'pickup')
+    this.fx.ring(e.pos, 5, color, 0.4)
+    this.fx.flare(e.pos, 4, color, 0.3)
+    this.popupAt(`pickup.${e.pickupType}`, this.ship.pos, 'pickup')
   }
 
   private onBossPhase(s: BossState): void {
@@ -440,6 +447,7 @@ export class Game implements Arena, Director {
     if (playing) {
       this.abilityCooldown = Math.max(0, this.abilityCooldown - dt)
       this.abilityTime = Math.max(0, this.abilityTime - dt)
+      this.weaponBoostTime = Math.max(0, this.weaponBoostTime - dt)
     }
     this.ship.barrierActive = this.ship.profile.ability.kind === 'aegis' && this.abilityTime > 0
     let move = { x: this.input.move.x, y: this.input.move.y }
@@ -522,7 +530,9 @@ export class Game implements Arena, Director {
     const weapon = profile.weapon
     const afterburn = profile.ability.kind === 'afterburn' && this.abilityTime > 0
     const fireRateBoost = afterburn ? (profile.ability.fireRateBoost ?? 1) : 1
-    this.fireCooldown += 1 / (CONFIG.weapon.rate * weapon.rateMultiplier * fireRateBoost)
+    const uplinkRateBoost = this.weaponBoostTime > 0 ? CONFIG.powerups.weaponFireRateMultiplier : 1
+    const uplinkDamageBoost = this.weaponBoostTime > 0 ? CONFIG.powerups.weaponDamageMultiplier : 1
+    this.fireCooldown += 1 / (CONFIG.weapon.rate * weapon.rateMultiplier * fireRateBoost * uplinkRateBoost)
     if (this.fireCooldown < 0) this.fireCooldown = 0
     const count = weapon.kind === 'twin' ? 2 : weapon.kind === 'triad' ? 3 : 1
     for (let i = 0; i < count; i += 1) {
@@ -531,7 +541,7 @@ export class Game implements Arena, Director {
       const muzzle = this.ship.muzzle(side, tmpA)
       const dir = tmpB.subVectors(this.aimPoint, muzzle).normalize()
       if (angle !== 0) dir.applyAxisAngle(WORLD_UP, angle).normalize()
-      this.shots.fire(muzzle, dir, CONFIG.weapon.speed, CONFIG.weapon.range / CONFIG.weapon.speed, CONFIG.weapon.damage * weapon.damageMultiplier, weapon.color)
+      this.shots.fire(muzzle, dir, CONFIG.weapon.speed, CONFIG.weapon.range / CONFIG.weapon.speed, CONFIG.weapon.damage * weapon.damageMultiplier * uplinkDamageBoost, weapon.color)
       this.fx.muzzle(muzzle, weapon.color)
     }
     this.run = shotFired(this.run, count)
@@ -886,6 +896,10 @@ export class Game implements Arena, Director {
       rollReady: this.ship.rollCooldown > 0 ? 1 - this.ship.rollCooldown / (CONFIG.roll.duration + CONFIG.roll.cooldown) : 1,
       abilityReady: this.abilityCooldown > 0 ? 1 - this.abilityCooldown / this.ship.profile.ability.cooldown : 1,
       abilityActive: this.abilityTime > 0,
+      weaponBoost: {
+        remaining: this.weaponBoostTime,
+        fraction: Math.min(1, this.weaponBoostTime / CONFIG.powerups.weaponDuration),
+      },
       grazes: r.grazes,
       boss: this.boss.active ? this.boss.health : null,
       reticle: {

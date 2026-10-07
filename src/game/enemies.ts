@@ -4,6 +4,7 @@ import { InstancedBatch } from '../engine/pool'
 import { GROUP_TARGET, type Arena } from './arena'
 import { CONFIG } from './config'
 import { buildCell, buildChisel, buildLantern, buildMine, buildMite, buildOreChunk, buildRock, type ModelParts } from './models'
+import { POWERUP_COLORS, powerupForDrop, type PowerupKind } from './powerups'
 
 export type EnemyKind = 'mite' | 'chisel' | 'lantern' | 'rock' | 'bigrock' | 'mine' | 'chunk' | 'cell'
 export type Motion = 'swoop' | 'hold' | 'drift' | 'thrown'
@@ -29,6 +30,7 @@ export type SpawnSpec = {
   vel?: V3
   scale?: number
   drop?: boolean
+  pickupType?: PowerupKind
 }
 
 type Stats = { hp: number; radius: number; score: number; primary: string; secondary: string; debris: string; boom: number }
@@ -69,6 +71,7 @@ export type Enemy = {
   heat: number
   flash: number
   drop: boolean
+  pickupType: PowerupKind
   body: RAPIER.RigidBody
   collider: RAPIER.Collider
 }
@@ -91,6 +94,7 @@ export class Enemies {
   private readonly byCollider = new Map<number, Enemy>()
   private readonly batches: Record<EnemyKind, { body: InstancedBatch; glow: InstancedBatch }>
   private nextId = 1
+  private pickupDropIndex = 0
   private readonly v = new THREE.Vector3()
   private readonly w = new THREE.Vector3()
   private readonly q = new THREE.Quaternion()
@@ -101,9 +105,9 @@ export class Enemies {
   constructor(private readonly arena: Arena, private readonly events: EnemyEvents) {
     const bodyMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.55, metalness: 0.35 })
     const glowMat = () => new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false })
-    const make = (parts: ModelParts, cap: number) => {
-      const body = new InstancedBatch(parts.body, bodyMat(), cap, { flash: true })
-      const glow = new InstancedBatch(parts.glow, glowMat(), cap)
+    const make = (parts: ModelParts, cap: number, colors = false) => {
+      const body = new InstancedBatch(parts.body, bodyMat(), cap, { flash: true, colors })
+      const glow = new InstancedBatch(parts.glow, glowMat(), cap, { colors })
       this.group.add(body.mesh, glow.mesh)
       return { body, glow }
     }
@@ -118,7 +122,7 @@ export class Enemies {
       bigrock: make({ body: buildRock(3, 1, '#7a6358'), glow: rock.glow.clone() }, 24),
       mine: make(buildMine(), 30),
       chunk: make(buildOreChunk(), 24),
-      cell: make(buildCell(), 12),
+      cell: make(buildCell(), 12, true),
     }
   }
 
@@ -161,6 +165,7 @@ export class Enemies {
     e.flash = 0
     e.age = 0
     e.drop = spec.drop ?? false
+    e.pickupType = spec.pickupType ?? 'health'
     e.quat.random()
     e.spin.setFromAxisAngle(this.v.randomDirection(), (spec.kind === 'rock' || spec.kind === 'bigrock' ? 0.6 + Math.random() * 1.4 : spec.kind === 'chunk' ? 4 : 1.2) / 60)
     const hasCollider = spec.kind !== 'cell'
@@ -181,7 +186,7 @@ export class Enemies {
       id: 0, kind: 'mite', active: false, hp: 1, maxHp: 1, radius: 1, scale: 1,
       pos: new THREE.Vector3(), prev: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), spin: new THREE.Quaternion(),
       age: 0, motion: 'swoop', p0: new THREE.Vector3(), p1: new THREE.Vector3(), p2: new THREE.Vector3(), duration: 4, hold: 4,
-      fire: 'none', fireTimer: 1, fireCount: 0, heat: 1, flash: 0, drop: false, body, collider,
+      fire: 'none', fireTimer: 1, fireCount: 0, heat: 1, flash: 0, drop: false, pickupType: 'health', body, collider,
     }
     this.byCollider.set(collider.handle, e)
     return e
@@ -197,6 +202,7 @@ export class Enemies {
   clear(): void {
     for (const e of this.list) this.release(e)
     this.list.length = 0
+    this.pickupDropIndex = 0
   }
 
   /** Apply damage from a shot or blast. Returns true when it destroyed the target. */
@@ -241,7 +247,7 @@ export class Enemies {
         this.spawn({ kind: 'rock', p0: [e.pos.x + this.v.x, e.pos.y + this.v.y, e.pos.z + this.v.z], vel: [this.v.x * 3, this.v.y * 3, e.vel.z * 0.8 + 6], scale: 0.7 })
       }
     }
-    if (e.drop) this.spawn({ kind: 'cell', p0: [e.pos.x, e.pos.y, e.pos.z], vel: [0, 0, 12] })
+    if (e.drop) this.spawn({ kind: 'cell', pickupType: powerupForDrop(this.pickupDropIndex++), p0: [e.pos.x, e.pos.y, e.pos.z], vel: [0, 0, 12] })
     this.events.killed(e)
     e.hp = 0
     e.active = false
@@ -415,8 +421,9 @@ export class Enemies {
       const sc = e.scale * (e.kind === 'rock' || e.kind === 'bigrock' ? STATS[e.kind].radius * 0.95 : 1) * (0.4 + 0.6 * pop)
       this.s.setScalar(sc)
       const blink = e.kind === 'mine' ? (Math.sin(time * 10 + e.id) > 0.3 ? 0.5 : 0) : e.kind === 'cell' ? 0.25 + Math.sin(time * 8) * 0.2 : 0
-      b.body.push(this.v, e.quat, this.s, undefined, Math.max(e.flash, blink))
-      b.glow.push(this.v, e.quat, this.s)
+      const pickupColor = e.kind === 'cell' ? POWERUP_COLORS[e.pickupType] : undefined
+      b.body.push(this.v, e.quat, this.s, pickupColor, Math.max(e.flash, blink))
+      b.glow.push(this.v, e.quat, this.s, pickupColor)
     }
     for (const k of Object.keys(this.batches) as EnemyKind[]) {
       this.batches[k].body.end()

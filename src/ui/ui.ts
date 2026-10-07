@@ -193,6 +193,18 @@ export class Ui {
     const abilityKey = this.input.method === 'gamepad' ? 'LB' : 'E'
     if (this.changed('abilityKey', abilityKey)) this.el.abilityKey.textContent = abilityKey
     this.el.abilityState.textContent = this.i18n.t(h.abilityActive ? 'hud.abilityActive' : h.abilityReady >= 1 ? 'hud.abilityReady' : 'hud.abilityCharging')
+    const weaponActive = h.weaponBoost.remaining > 0
+    this.el.weaponBoostPip.classList.toggle('is-active', weaponActive)
+    if (weaponActive) {
+      const seconds = Math.ceil(h.weaponBoost.remaining)
+      if (this.changed('weaponBoostSeconds', seconds)) this.el.weaponBoostTime.textContent = `${seconds}s`
+      this.el.weaponBoostTrack.style.transform = `scaleX(${h.weaponBoost.fraction.toFixed(3)})`
+      this.el.weaponBoostTrack.parentElement!.setAttribute('aria-valuenow', String(Math.round(h.weaponBoost.fraction * 100)))
+    } else if (this.changed('weaponBoostSeconds', 0)) {
+      this.el.weaponBoostTime.textContent = ''
+      this.el.weaponBoostTrack.style.transform = 'scaleX(0)'
+      this.el.weaponBoostTrack.parentElement!.setAttribute('aria-valuenow', '0')
+    }
     // Boss bar.
     const b = h.boss
     this.el.bossBar.classList.toggle('is-active', !!b && this.cache.get('bossOn') === true)
@@ -699,6 +711,11 @@ export class Ui {
   </div>
   <div class="hud-top-right">
     <button class="hud-pause" data-action="pause" data-i18n-label="touch.pause">${ICON.pause}</button>
+    <div class="weapon-boost-pip" data-el="weaponBoostPip" role="status" aria-live="polite">
+      <small data-i18n="hud.weaponBoost"></small>
+      <div class="weapon-boost-track-wrap" role="progressbar" aria-label="Weapons Uplink duration" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i data-el="weaponBoostTrack"></i></div>
+      <b data-el="weaponBoostTime"></b>
+    </div>
   </div>
   <div class="hud-status" data-el="status">
     <div class="bar-row shield"><span class="hud-label" data-i18n="hud.shield"></span><div class="bar"><i data-el="shieldBar"></i></div><b data-el="shieldN">100</b></div>

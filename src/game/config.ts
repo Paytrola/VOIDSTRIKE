@@ -59,6 +59,11 @@ export const CONFIG = {
     noDamage: 20000,
   },
   repair: { hull: 22, shield: 30 },
+  powerups: {
+    weaponDuration: 8,
+    weaponDamageMultiplier: 1.35,
+    weaponFireRateMultiplier: 1.25,
+  },
   rail: { speed: 38, boost: 64, boss: 30 },
   aim: {
     /** Distance of the aim point when nothing is under the reticle. */

@@ -221,12 +221,12 @@ export function buildOreChunk(): ModelParts {
   return k.build()
 }
 
-/** Repair cell pickup. */
+/** Shared, neutral pickup cell; its instanced tint identifies the power-up type. */
 export function buildCell(): ModelParts {
   const k = new Kit()
-  k.add(oct(0.55), '#e9fff4', { s: [0.8, 1.3, 0.8] })
-  k.add(box(0.95, 0.22, 0.22), PALETTE.toxic, {}, true)
-  k.add(box(0.22, 0.95, 0.22), PALETTE.toxic, {}, true)
+  k.add(oct(0.55), '#ffffff', { s: [0.8, 1.3, 0.8] })
+  k.add(box(0.95, 0.22, 0.22), '#ffffff', {}, true)
+  k.add(box(0.22, 0.95, 0.22), '#ffffff', {}, true)
   return k.build()
 }
 

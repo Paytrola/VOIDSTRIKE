@@ -9,7 +9,7 @@ deep-core mining platform, across three phases.
 pnpm install
 pnpm dev      # dev server
 pnpm build    # typecheck + production build + bundle budget
-pnpm test     # unit tests (rules, timeline, impact toolkit, aircraft, save, i18n)
+    pnpm test     # unit tests (rules, timeline, impact toolkit, aircraft, power-ups, save, i18n)
 pnpm smoke    # after build: headless playthrough to Results + screenshots in shots/
 ```
 
@@ -67,6 +67,7 @@ Score = kills × chain multiplier + grazes + clear and hull bonuses. Results sho
 | `src/engine/audio.ts`, `music.ts` | Mixer buses, synthesized SFX recipes, step-sequenced in-run music and the supplied menu track |
 | `src/engine/save.ts`, `i18n.ts` | Versioned local save + leaderboard; English-only player interface |
 | `src/game/config.ts`, `aircraft.ts` | Global tuning plus Wraith, Bulwark and Tempest class profiles |
+| `src/game/powerups.ts` | Deterministic pickup distribution and pure Health, Shield and Weapons Uplink effects |
 | `src/game/rules.ts` | Pure hull/shield/combo/score/grade rules (unit tested) |
 | `src/game/level.ts` | The whole level as one timeline script |
 | `src/game/boss.ts` | BOREWARDEN: model, parts, phase timelines and attack verbs |
