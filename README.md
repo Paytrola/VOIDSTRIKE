@@ -1,93 +1,106 @@
 # VOIDSTRIKE — Shattered Ring Breakout
 
-An original 3D on-rails shooter for the browser (three.js + Rapier, TypeScript, Vite).
-Fly the VOIDSTRIKE interceptor through a shattered planetary ring at full burn, chain kills for a
-score multiplier, roll through bullet walls, and bring down **BOREWARDEN**, an autonomous
-deep-core mining platform, across three phases.
+![VOIDSTRIKE cover](assets/share/og.png)
 
-```bash
-pnpm install
-pnpm dev      # dev server
-pnpm build    # typecheck + production build + bundle budget
-    pnpm test     # unit tests (rules, timeline, impact toolkit, aircraft, power-ups, save, i18n)
-pnpm smoke    # after build: headless playthrough to Results + screenshots in shots/
-```
+**VOIDSTRIKE** is a Three.js browser space shooter built from the Heliospur showcase. Fly an interceptor through a shattered planetary ring, chain kills, dodge enemy fire, and defeat **BOREWARDEN**, an autonomous deep-core mining platform, across three combat phases.
+
+[Play the current build](https://voidstrike-kg4srpnu.manus.game)
+
+## Current version and status
+
+- **Game/package version:** `0.1.0` (`package.json`; details in [VERSION.md](VERSION.md)).
+- **Current mode:** playable single-player rail-shooter campaign with local saves and a local leaderboard.
+- **Language:** English-only player experience.
+- **Online roadmap:** Free-Flight PvP, player accounts/login, global leaderboard, and cross-device cloud saves have been requested. They are **not implemented in this source version**. PvP hosting requires a selected Cloud Computer; online services have not yet been configured.
+
+## Included features
+
+- Original campaign structure: enemy waves, an asteroid-storm boost section, checkpoint, and a three-phase BOREWARDEN boss.
+- **Aircraft Hangar** with persistent local selection:
+
+  | Class | Hull | Speed | Weapon | Ability |
+  | --- | ---: | ---: | --- | --- |
+  | **Wraith** — interceptor | 80 HP | 1.25× | Twin Pulse, paired shots | Afterburn: 2.5 s speed/fire-rate boost; 12 s cooldown |
+  | **Bulwark** — gunship | 140 HP | 0.78× | Siege Cannon, slow heavy shot | Aegis Field: 2.4 s damage immunity; 18 s cooldown |
+  | **Tempest** — striker | 100 HP | 1.00× | Triad Spread, three-shot fan | EMP Pulse clears active hostile shots; 20 s cooldown |
+
+- Collectible enemy drops, distributed in a predictable Health / Shield / Weapons sequence:
+  - **Health Cell:** restores 22 hull, up to the selected aircraft's maximum.
+  - **Shield Cell:** restores 30 shield, up to the existing 60-point cap.
+  - **Weapons Uplink:** for 8 seconds, increases shot damage by 35% and fire rate by 25%; collecting another refreshes the timer instead of stacking effects.
+- Synthesized in-game sound effects and the user-supplied **Operation Cryo Intro** title-menu track.
+- Recoverable startup: an indeterminate slow-load state after 10 seconds and a Retry button after 30 seconds.
+- Local campaign score history and versioned browser save data; no online account or cross-device sync in this version.
 
 ## Controls
 
-| Action | Keyboard & mouse | Gamepad | Touch (landscape) |
+| Action | Keyboard & mouse | Gamepad | Touch |
 | --- | --- | --- | --- |
-| Deploy from title | Space or click Deploy | A / Start | Tap Deploy |
-| Fly | Mouse steers (ship follows the reticle) or WASD | Left stick | Left floating stick |
-| Aim | Mouse | Right stick | Reticle rides ahead of the ship, with aim assist |
-| Fire | Left button or J | RT | FIRE button |
-| Activate aircraft ability | E | LB | — |
-| Roll dodge (i-frames, in flight) | Space or K | LT | ROLL button |
-| Pause | Esc | Start | Pause button |
+| Deploy from title | Space or **Deploy** button | A / Start | Tap **Deploy** |
+| Steer | WASD / arrow keys | Left stick | Floating stick |
+| Aim | Mouse | Right stick | Reticle ahead of the ship with aim assist |
+| Fire | Left mouse button or J | RT / RB / A | **FIRE** |
+| Aircraft ability | E | LB | No on-screen ability button |
+| Roll dodge | Space or K; right-click also rolls | LT / X | **ROLL** |
+| Pause | Esc or P | Start | Pause button |
 
-Open **Aircraft Hangar** from the title menu to choose an airframe; selection is saved between sessions. Space still deploys directly with the currently selected aircraft.
+Space deploys from the title menu and rolls once the mission is underway. Open **Aircraft Hangar** from the title menu to select an airframe; its selection is saved locally between sessions.
 
-## Aircraft classes
+## Campaign outline
 
-| Class | Hull | Speed | Weapon | Ability |
-| --- | ---: | ---: | --- | --- |
-| **Wraith** — interceptor | 80 HP | 1.25× | Twin Pulse: two quick shots | Afterburn: 2.5 s speed/fire-rate boost, 12 s cooldown |
-| **Bulwark** — gunship | 140 HP | 0.78× | Siege Cannon: slow, heavy slug | Aegis Field: 2.4 s damage immunity, 18 s cooldown |
-| **Tempest** — striker | 100 HP | 1.00× | Triad Spread: three-shot fan | EMP Pulse: clears active hostile shots, 20 s cooldown |
+1. Launch cinematic and a short first-flight tutorial on the first run.
+2. Scout screen: MITE drones and CHISEL cutters.
+3. Asteroid storm with destructible rocks and a boost section.
+4. Mining convoy: LANTERN gunships, mines, and mixed formations.
+5. BOREWARDEN checkpoint and boss encounter:
+   - **I · GRIND:** grinder-arm weak points, spark streams, drill spirals, and ore lobs.
+   - **II · EXCAVATE:** exposed auger core, laser sweeps, ore showers, and gapped rings.
+   - **III · MELTDOWN:** shed armour, nova spirals, drill lunge, shock ring, and laser pinwheel.
 
-Each aircraft has a distinct shot color, weapon sound and ability sound. The existing hit, explosion, pickup, roll and boss cues remain active through the saved SFX-volume setting.
+Campaign score combines kills, chain multiplier, grazes, and clear/hull bonuses. Results include a grade and can be stored in the local leaderboard.
 
-## The level
+## Run locally
 
-One level, paced entirely by the engine timeline (`src/game/level.ts`):
+Verified toolchain: Node.js `22.13.0` and pnpm `10.18.0`.
 
-1. **Launch** cinematic, then a short first-flight tutorial (first play only).
-2. **Wave 1 — scout screen**: MITE drones and CHISEL cutters in readable formations.
-3. **Asteroid storm**: boost section with speed lines, star stretch and destructible rocks.
-4. **Wave 2 — mining convoy**: LANTERN gunships, mines and mixed formations.
-5. **BOREWARDEN** (checkpoint): warning band, reveal cinematic, then
-   - **I · GRIND** — grinder arms are the weak points; sweeping spark streams, drill spirals, ore lobs.
-   - **II · EXCAVATE** — drill petals open to expose the auger core; laser sweeps, ore showers, gapped rings.
-   - **III · MELTDOWN** — armour sheds; nova spirals, drill lunge with a shock ring, laser pinwheel.
+```bash
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm typecheck
+pnpm test
+pnpm build
+```
 
-Score = kills × chain multiplier + grazes + clear and hull bonuses. Results show a grade
-(S/A/B/C/D) and can be saved to the local leaderboard.
+Optional browser smoke run, after the development environment has its browser dependencies available:
 
-## Layout
+```bash
+pnpm smoke
+```
 
-| Path | Role |
+The project is TypeScript + Vite, using Three.js and Rapier3D. `pnpm build` runs the project's Web build workflow. Unit/regression tests use Vitest.
+
+### Menu soundtrack when running outside Manus
+
+The supplied MP3 is included at `assets/audio/Operation_Cryo_Intro_music_BRM5_KLICKAUD.mp3`. In the managed game build, `src/main.ts` loads it from the project's `/manus-storage/` media route so the large track is not bundled into the static game build. A plain external clone does not have that project storage route; point `menuMusicUrl` in `src/main.ts` to a local or hosted copy when running outside the managed project. No storage credentials are included in this repository.
+
+## Project map
+
+| Path | Responsibility |
 | --- | --- |
-| `src/engine/loop.ts` | Fixed 60 Hz simulation, interpolated rendering, global time scale (hit-stop / slow-mo) |
-| `src/engine/timeline.ts` | **Timeline event system** — reusable pacing scripts (`wait`, `at`, `call`, `every`, loops) |
-| `src/engine/impact.ts` | **Impact toolkit** — hit-stop, slow-mo, trauma shake, directional kick, screen flash, distortion pulse |
-| `src/engine/pool.ts` | Allocation-free `ObjectPool` + `InstancedBatch` (one draw call per pooled kind) |
-| `src/engine/input.ts` | Keyboard/mouse, dual-stick gamepad and touch unified into one action state |
-| `src/engine/physics.ts` | Rapier world, kinematic targets, ray/segment queries for shots and aim |
-| `src/engine/renderer.ts` | WebGL renderer, quality tiers, bloom + post (aberration, zoom, tint, vignette) |
-| `src/engine/audio.ts`, `music.ts` | Mixer buses, synthesized SFX recipes, step-sequenced in-run music and the supplied menu track |
-| `src/engine/save.ts`, `i18n.ts` | Versioned local save + leaderboard; English-only player interface |
-| `src/game/config.ts`, `aircraft.ts` | Global tuning plus Wraith, Bulwark and Tempest class profiles |
-| `src/game/powerups.ts` | Deterministic pickup distribution and pure Health, Shield and Weapons Uplink effects |
-| `src/game/rules.ts` | Pure hull/shield/combo/score/grade rules (unit tested) |
-| `src/game/level.ts` | The whole level as one timeline script |
-| `src/game/boss.ts` | BOREWARDEN: model, parts, phase timelines and attack verbs |
-| `src/game/enemies.ts`, `bullets.ts`, `fx.ts` | Pooled + instanced enemies, bullet patterns, particles |
-| `src/game/ship.ts`, `rail.ts`, `env.ts`, `models.ts` | Player ship, rail spline + camera frame, sky/asteroids/speed field, procedural low-poly models |
-| `src/ui/`, `src/styles/main.css` | HTML/CSS game UI (title, aircraft Hangar, HUD, pause, settings, leaderboard, results) and inherited touch controls |
-| `src/i18n/en.json` | All active player-facing text |
-| `assets/audio/Operation_Cryo_Intro_music_BRM5_KLICKAUD.mp3` | Supplied source track; loaded from project storage for the menu |
+| `src/engine/loop.ts`, `timeline.ts`, `impact.ts` | Fixed-step simulation, reusable campaign timelines, hit-stop, slow motion, shake, and impact effects |
+| `src/engine/input.ts` | Keyboard, mouse, gamepad, and touch input |
+| `src/engine/physics.ts`, `renderer.ts`, `pool.ts` | Rapier queries, Three.js rendering/quality tiers, and pooled rendering objects |
+| `src/engine/audio.ts`, `music.ts` | Audio mixer, synthesized effects, sequenced in-run score, and menu-track loading |
+| `src/engine/save.ts`, `i18n.ts` | Versioned local save, local leaderboard, and English strings |
+| `src/game/aircraft.ts`, `config.ts`, `powerups.ts` | Aircraft profiles, game tuning, and collectible pickup rules |
+| `src/game/level.ts`, `boss.ts`, `enemies.ts`, `bullets.ts` | Mission timeline, BOREWARDEN, enemy behavior, projectiles, and effects |
+| `src/ui/`, `src/styles/main.css` | Title menu, Hangar, HUD, pause/settings, local leaderboard, and results UI |
+| `src/i18n/en.json` | Active player-facing text |
+| `assets/audio/`, `assets/share/`, `public/fonts/` | Supplied soundtrack, game sharing art, and bundled fonts |
+| `plan.md`, `TODO.md`, `VERSION.md`, `CHANGELOG.md` | Design/roadmap, tracked outcomes, and version history |
 
-## Rules for changes
+## Credits and licensing notes
 
-- **Simulation in `step()`, visuals in `render()`.** Gameplay state only changes in fixed steps;
-  read presses there with `input.consume(action)`.
-- **Rules stay pure.** Scoring, damage and grading live in `rules.ts` with tests.
-- **Pacing goes through timelines, feel goes through `Impact`.** Neither engine module knows
-  about gameplay; the level and the boss only provide verbs.
-- **Every visible string is an i18n key** in `src/i18n/en.json`; the player experience is pinned to English.
-- **UI is HTML/CSS**, keyboard/gamepad navigable (`data-nav` on focusable controls).
-- Keep `pnpm build` within budget (`scripts/check-size.mjs`) and `pnpm smoke` green.
+The project began with the supplied Heliospur showcase source and assets. The title menu uses the user-supplied Operation Cryo Intro track; in-game effects are synthesized by the game. Bundled Sora, Figtree, and Noto Sans SC fonts include SIL Open Font License 1.1 notices in `public/fonts/`. Core dependencies include Three.js (MIT) and Rapier (Apache-2.0).
 
-## Credits
-
-The supplied Heliospur source provides the shooter, enemy/boss systems, procedural models, sound effects and in-run sequencer. The title menu uses the supplied Operation Cryo Intro track. Fonts: Sora, Figtree and Noto Sans SC — SIL Open Font License 1.1 (see `public/fonts/*-OFL.txt`). Libraries: three.js (MIT), Rapier (Apache-2.0).
+No project-level license has been declared. The presence of this private development source does not grant a new redistribution license for the supplied game assets or soundtrack; review the original source and asset terms before redistributing.

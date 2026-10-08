@@ -1,75 +1,42 @@
 # VOIDSTRIKE implementation plan
 
-## Product scope
+## Existing game to preserve
 
-Adapt the approved Heliospur source archive into the initialized Three.js/Vite game project without replacing its managed runtime. Preserve the on-rails space-shooter campaign, enemy waves, three-phase Borewarden boss, English-only player experience, and existing offline systems. Brand the title and main menu as **VOIDSTRIKE**, add the supplied MP3 as menu-only music, and let Space deploy from the title menu.
+Keep the current Three.js / TypeScript / Vite game and its on-rails campaign intact: the launch/tutorial flow, enemy waves, asteroid storm, BOREWARDEN checkpoint and three boss phases, local scores, local save data, music, aircraft Hangar, and collectible power-ups. The English-only player experience and user-supplied title music remain. The current implementation is version `0.1.0`; see `VERSION.md` and `CHANGELOG.md`.
 
-## Architecture and project structure
+## Newly requested online scope
 
-- `src/engine/`: retain the source game's Three.js/Rapier loop, audio mixer, input, saves, renderer, and music primitives.
-- `src/game/`: integrate Heliospur's rail shooter, waves, boss, combat, and procedural source models. Keep the initialized project's tuning manager adapted to genuine Heliospur configuration parameters and keep the Vite preview tuning bridge.
-- `src/ui/` and `src/styles/`: use the source game's DOM overlays and arcade UI; update the title, deployment prompt, English-only settings, and menu audio lifecycle.
-- `src/i18n/`: use the existing English catalog as the only active game locale; no runtime locale detection or selector.
-- `assets/audio/Operation_Cryo_Intro_music_BRM5_KLICKAUD.mp3`: preserve the supplied source in the checkpoint; fetch the same track at runtime through its project-managed `/manus-storage/...` path so it does not inflate the initial static game bundle.
-- Root project files: preserve initialized package/dependency versions, Vite port/host configuration and Manus game-tuning plugin; use the source's game tests and size/smoke checks where compatible.
+The user explicitly selected all of these additions after the original Game Blueprint had been approved without online features:
 
-No backend or online integrations are in scope. Do not source or generate additional visual models; the supplied game archive is the source of gameplay and art. Keep the uploaded track unchanged.
+1. **Free-Flight PvP:** a separate mode/menu destination, continuous open-arena flight rather than rail movement, with player-vs-player combat. Preserve the original rail campaign as a separate mode. Reuse Wraith, Bulwark, and Tempest with their current class profiles, weapons, abilities, and Health/Shield/Weapons pickups.
+2. **Player accounts/login:** use the platform's supported game-login flow once the current project configuration records that selection. Keep a guest/offline path so the campaign remains playable when a player is signed out or disconnected.
+3. **Global leaderboard:** preserve the existing local leaderboard and add an online global campaign-score view. Treat score submissions from a browser as untrusted; validate them server-side, use stable account identity, and make submissions idempotent. A client-only single-player run is tamperable, so document the leaderboard's anti-cheat limits unless the scoring path is made independently authoritative.
+4. **Cloud save synchronization:** keep the current local save as an offline fallback and sync account-owned campaign/profile data across devices. A reasonable initial boundary is campaign progress, aircraft selection, and player statistics; keep device-specific controls/accessibility settings local. Version the save schema and handle sign-in, offline play, upload/download, and conflicts without deleting local progress.
 
-## Design direction
+## Architecture
 
-- **Design movement:** preserve the source's high-contrast, arcade space-opera interface and fast 3D rail-shooter presentation.
-- **Core principles:** legible combat-first composition; bold angular arcade hierarchy; kinetic but controlled transitions; all controls remain reachable by mouse, keyboard and gamepad.
-- **Color philosophy:** retain the source's near-black violet space, warm amber/gold danger and reward cues, and cyan instrumentation, maintaining contrast against the game scene.
-- **Layout paradigm:** keep the existing left-anchored title block over an animated 3D backdrop, with compact flight controls at the right and utility prompts along the bottom; do not recenter into a generic grid.
-- **Signature elements:** the source's angular outlined wordmark, a new cyan strike cutting through a segmented amber ring for the loader/favicon, and cyan/amber flight-instrument accents.
-- **Interaction philosophy:** deployment is immediate and unmistakable; Space and the visible launch control share the same action; preserve in-run Space roll behavior.
-- **Animation:** preserve the source's short rise/pop screen transitions, subtle title-scene motion, and readable gameplay effects; respect reduced-motion controls.
-- **Typography:** reuse bundled Sora for display, Figtree for body, and retain the existing bundled Noto Sans SC fallback only if needed by the inherited source assets; the live UI remains English.
-- **Brand essence:** a high-speed on-rails space shooter about breaking through hostile orbital defenses. Personality: **kinetic, bold, precise**.
-- **Brand voice:** terse mission language with strong verbs. Examples: “PRESS SPACE TO DEPLOY” and “Thread the ring. Break the machine.”
-- **Wordmark & logo:** retain the source's large italic display treatment with the exact name VOIDSTRIKE; pair it with a compact, distinctive cyan strike/ring symbol used consistently in the loading screen and favicon.
-- **Signature brand color:** electric cyan, used for navigation/instrument accents against the dark-violet void.
+- Keep the existing static Three.js game client and campaign logic; do not reinitialize or replace the project.
+- Put PvP client networking, lobby/match UI state, and protocol adapters under `src/game/pvp/` (with account/save/leaderboard client adapters under a separate `src/game/online/` area if needed). Keep shared render/input code in the existing `src/engine/` and `src/ui/` modules.
+- Add the independent Node.js WebSocket service in a root `server/` directory, adapting the installed authoritative Three.js multiplayer reference. The server owns rooms, player transforms, movement constraints, shots/hits, ability cooldowns, pickup state, health, deaths, respawns, scores, and match transitions; the client sends bounded input and renders accepted snapshots.
+- Start with a 1v1 room-code duel, two seats, respawns, and first-to-five-kills. Room codes are invitations, not authentication. Use a versioned client/server protocol, server-issued room-scoped seat credentials, input/message size and rate limits, membership checks, heartbeat cleanup, bounded reconnect grace, and actionable full/disconnected/unavailable UI.
+- Make the local player's movement feel immediate with local anticipation and smooth correction from server snapshots; remote players and all shared outcomes remain server-authoritative. Do not trust client coordinates, hit claims, pickups, or scores.
+- Use the managed project's supported online services for the login, database-backed cloud save, and leaderboard work, following the installed authentication and leaderboard guides before implementation. The WebSocket server remains a separate Cloud Computer service; publishing the static game does not deploy it.
 
-## Behavior decisions
+## Current prerequisites and scope boundaries
 
-- Load the provided MP3 asynchronously as a looping menu track only from project storage. Begin playback after the first user gesture (browser autoplay policy), respect saved music volume and mute settings, stop on deployment, and resume when returning to the title.
-- On the title screen, Space starts the mission directly. Keep the original combat control mapping after deployment.
-- Pin the runtime to English: no browser-language auto-detection and no language selector; keep the save format robust to existing data.
-- Preserve the initialized Vite/Three.js runtime, package lock, host/port conventions, preview parent bridge, and game-owned Tweak integration.
+- The prior approved Game Blueprint revision records no online integrations. The newer explicit user request is the current product scope, but do not treat the old receipt as evidence that online services were provisioned. Before enabling server/database services, persist the current feature selection through the supported project configuration/approval flow and verify the resulting config.
+- `GET game/multiplayer` previously returned no selected Cloud Computer (`pcId: null`). The user said they will create/start one. After it appears, list devices again, get the user's explicit choice for this project's multiplayer host, save that exact device using the latest multiplayer revision, and inspect its runtime, ports, and proxy before deploying. Never run the persistent authoritative server in the temporary Sandbox.
+- Keep secrets out of source, the static bundle, `public/multiplayer/bootstrap.json`, invitations, and logs. The published client must use the verified WSS endpoint and a shared build/protocol ID; never invent an endpoint from an internal request host.
+- Game publication is separate from Git repository connection. Do not publish a new game build unless the existing publication authorization or a later explicit request permits it. Claim production multiplayer only after two browser clients connect through the authorized published game URL and pass the installed RTT/jitter/reconnect checks.
+- No payment integration is requested.
 
-## Source reference
+## Project structure
 
-- Published source archive supplied with the task: https://d1oupeiobkpcny.cloudfront.net/assets/dashboard/materials/2026/09/27/71db6ad986146262ff6891d9ec985c883ac43b2f577834827adc749eef8fe475.zip
-- Original session reference: https://vida.butterfly-effect.dev/app/aHinap7VRoxkViy3AjvZtq
-- The downloaded archive's package metadata matched the initialized project's Three.js, Rapier, TypeScript, Vite and pnpm versions; keep the initialized lockfile and Vite host/port/tuning integration.
-
-## First-complete-game sharing and loader requirements
-
-The first playable preview/checkpoint needs a VOIDSTRIKE-specific loading screen, a project favicon PNG and game-sharing metadata. The loader will retain its real progress behavior while replacing the inherited ship mark with the same cyan VOIDSTRIKE strike insignia as the favicon, on the game's solid dark-violet field. Create a separately AI-generated, optimized 16:9 1200×675 promotional cover with exact VOIDSTRIKE lettering; this is sharing art only, not an additional gameplay model or scene asset. Keep the cover, favicon, credits and any source-game references distinct and record the cover/icon paths in `game-sharing.json`.
-
-## User-reported startup stall
-
-The user supplied a screenshot of the initial VOIDSTRIKE loader paused at roughly one-third with “Charging reactor.” The existing boot bar advances only when each of four startup promises completes, so a slow module load can look frozen; the loader currently has no timeout or recovery control while a promise remains pending. Keep normal determinate progress, switch to an indeterminate bar and a polite slow-start status after 10 seconds, expose a working Retry control after 30 seconds, and cancel the watchdog on successful boot or the existing error handler. Late successful startup must still proceed to the title screen. Validate the strings, TypeScript, regression suite, production build, and the managed preview; exercise the stall presentation with a controlled browser-state check.
-
-## Aircraft classes and in-game SFX expansion
-
-Keep the existing user-supplied Operation Cryo Intro file as the looping title-menu track; the newly attached copy is byte-identical to the project asset. Extend the existing synthesized game-SFX mixer rather than adding unrelated audio assets. Preserve current impact, explosion, pickup, roll and boss cues, and add distinct weapon and activated-ability cues routed through the saved SFX volume/mute controls.
-
-Add a keyboard/gamepad-accessible Hangar from the title screen. The pilot can select and immediately save one of three classes; older saves missing the new field default to Wraith. Each card lists HP, speed, weapon and ability, and the same chosen class is applied by both title Deploy and Space-to-deploy. In flight, **E** (gamepad **LB**) activates the ability; the HUD displays ability readiness/cooldown. Preserve inherited touch behavior without adding a new touch action.
-
-Class balance and behavior:
-- **Wraith / Interceptor:** 80 HP, 1.25× movement speed; Twin Pulse fires a paired 0.55×-damage shot at the standard base fire rate; Afterburn boosts movement and fire rate for 2.5 seconds, with a 12-second cooldown.
-- **Bulwark / Gunship:** 140 HP, 0.78× movement speed; Siege Cannon fires one 2.2×-damage shot at 0.45× fire rate; Aegis Field grants 2.4 seconds of damage immunity, with an 18-second cooldown.
-- **Tempest / Striker:** 100 HP, 1.0× movement speed; Triad Spread fires three 0.48×-damage shots at 0.70× fire rate across a fan; EMP Pulse clears active hostile bullets, with a 20-second cooldown.
-
-Keep these profile multipliers layered over the existing global combat configuration so the preserved development Tweak controls still have real consumers and the existing tuned-run eligibility latch remains authoritative. Pass each class's HP maximum through run initialization, repairs/checkpoint restoration and the HUD fraction. Use class/weapon accent colors to distinguish aircraft and projectiles while retaining the supplied source-game 3D model; no additional 3D model production or external backend is needed. Keep the established English-only interface and offline game architecture.
-
-
-## Collectible power-ups (new request)
-
-- Reuse the existing drifting, ship-attracted pickup cells generated by enemy drops; rotate drops deterministically through Health, Shield and Weapon types so all three appear, without adding external or generated 3D assets.
-- **Health Cell:** restore `CONFIG.repair.hull` to hull only, capped at the selected aircraft's maximum HP. **Shield Cell:** restore `CONFIG.repair.shield` up to the existing shield maximum and clear the regeneration delay. These are separate effects, rather than each cell silently granting both.
-- **Weapons Uplink:** temporary run-scoped buff for 8 seconds, multiplying player-shot damage by 1.35 and fire rate by 1.25. Re-collecting refreshes the timer; it does not stack multiplicatively. It composes with aircraft weapon profiles and Wraith Afterburn.
-- Distinguish each pickup with a matching color, collection popup and existing pickup sound; show the live remaining Weapons Uplink on the HUD. Health/shield pickups use the existing hull/shield rules, preserve selected-aircraft caps, and do not change scoring or ranking.
-- Reset temporary weapon power at the start of a fresh run/retry and when restoring a checkpoint, but do not snapshot the temporary timer into the persistent checkpoint. Preserve the existing 3D/runtime/Tweak integration, English-only UI and inherited touch controls without adding new touch actions.
-- Validate deterministic drop rotation and pickup constants/health caps with the existing unit-test workflow, then run TypeScript, the unit suite and production build. Do not use browser automation for this gameplay addition.
+| Area | Responsibility |
+| --- | --- |
+| `src/engine/` | Existing Three.js rendering, physics, input, audio, local storage, and simulation utilities |
+| `src/game/` | Existing campaign plus aircraft/power-up systems; add `pvp/` and, if required, `online/` without coupling PvP into the rail campaign |
+| `src/ui/` | Existing menu/Hangar/HUD/settings/results; add sign-in/sync status, global leaderboard, lobby, and PvP match states |
+| `server/` | Standalone authoritative Node.js WebSocket service, protocol, validation, room/simulation logic, and its own package/lockfile |
+| `public/multiplayer/` | Public connection bootstrap only after a real, verified WSS host exists; never put credentials here |
+| Root docs | `README.md` for usage/status, `VERSION.md` for version/toolchain, `CHANGELOG.md` for shipped changes, `TODO.md` for requested outcomes |

@@ -2,3 +2,9 @@ node_modules/
 dist/
 shots/
 /.manus-webdev/preview-identity.json
+
+# Local configuration and credentials
+.env
+.env.*
+!/.env.example
+!/.env.*.example
