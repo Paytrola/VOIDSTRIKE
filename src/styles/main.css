@@ -504,3 +504,120 @@ body.has-touch .hud-top-right { right: calc(16px + var(--safe-r)); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+
+/* ─── Free-flight PvP ───────────────────────────────────────────────────── */
+.screen-pvp-lobby { z-index: 30; }
+.pvp-lobby-modal { width: min(680px, calc(100vw - 28px)); gap: 17px; }
+.pvp-header { text-align: center; }
+.pvp-header .hangar-sub { max-width: 54ch; }
+.pvp-loadout { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 9px; padding: 10px 15px; background: rgba(8, 6, 20, 0.65); border: 1px solid rgba(79, 227, 255, 0.28); font: 700 12px var(--display); letter-spacing: 0.08em; text-transform: uppercase; }
+.pvp-loadout > span:first-child { opacity: 0.55; }
+.pvp-loadout b { color: var(--cyan-2); }
+.pvp-loadout i { color: var(--amber); font-style: normal; }
+.pvp-lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; width: 100%; align-items: end; }
+.pvp-lobby-actions .btn { min-width: 0; width: 100%; text-align: center; }
+.pvp-lobby-actions .btn span { justify-content: center; }
+.pvp-room-input { display: flex; flex-direction: column; gap: 7px; font: 800 10px var(--display); letter-spacing: 0.18em; text-transform: uppercase; color: var(--cyan-2); }
+.pvp-room-input input { width: 100%; min-height: 48px; padding: 10px 14px; border: 2px solid rgba(255, 244, 228, 0.24); background: rgba(8, 6, 20, 0.85); color: var(--cream); font: 800 18px var(--display); letter-spacing: 0.25em; text-transform: uppercase; outline: none; }
+.pvp-room-input input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(79, 227, 255, 0.16); }
+.pvp-room-input input::placeholder { color: rgba(255, 244, 228, 0.28); }
+.pvp-room-code { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; width: 100%; padding: 10px 14px; background: rgba(8, 6, 20, 0.78); border: 1px solid rgba(255, 179, 71, 0.55); }
+.pvp-room-code > span { width: 100%; text-align: center; font: 800 10px var(--display); letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.65; }
+.pvp-room-code b { color: var(--gold); font: 800 28px var(--display); letter-spacing: 0.24em; }
+.pvp-room-code button { padding: 7px 13px; border: 1px solid rgba(255, 244, 228, 0.3); background: var(--ink-3); color: var(--cream); font: 800 11px var(--display); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.pvp-room-code button:focus-visible { outline: 2px solid var(--cyan); }
+.pvp-status { min-height: 38px; width: 100%; margin: 0; padding: 9px 12px; border-left: 3px solid var(--cyan); background: rgba(8, 6, 20, 0.52); color: var(--cyan-2); font-size: 13px; line-height: 1.4; text-align: center; }
+
+.screen-pvp-match { overflow: hidden; background: radial-gradient(ellipse at 50% 48%, rgba(22, 35, 68, 0.12), rgba(3, 6, 15, 0.46)); }
+.pvp-topbar { position: absolute; z-index: 2; top: calc(14px + var(--safe-t)); left: 50%; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(130px, 0.72fr) minmax(180px, 1fr); align-items: stretch; gap: 12px; width: min(760px, calc(100vw - 40px)); transform: translateX(-50%); }
+.pvp-player-card, .pvp-phase-card { min-width: 0; padding: 9px 14px; background: rgba(8, 11, 26, 0.82); border: 1px solid rgba(159, 244, 255, 0.26); box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.5); backdrop-filter: blur(7px); }
+.pvp-player-card { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 3px 10px; }
+.pvp-player-card small { grid-column: 1; color: var(--cyan); font: 800 9px var(--display); letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; }
+.pvp-player-card > b { grid-column: 1; overflow: hidden; font: 800 14px var(--display); letter-spacing: 0.08em; text-overflow: ellipsis; white-space: nowrap; }
+.pvp-scoreline { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 7px; color: var(--gold); font: 800 24px var(--display); }
+.pvp-scoreline i { color: rgba(255, 244, 228, 0.4); font-style: normal; font-size: 16px; }
+.pvp-player-rival { text-align: right; border-color: rgba(255, 61, 142, 0.34); }
+.pvp-player-rival small, .pvp-player-rival > b { grid-column: 2; }
+.pvp-player-rival .pvp-rival-bars { grid-column: 1; grid-row: 1 / span 2; display: grid; gap: 5px; width: 100%; }
+.pvp-rival-bars i, .pvp-vital > i { display: block; height: 7px; overflow: hidden; background: rgba(255, 244, 228, 0.12); transform: skewX(-15deg); }
+.pvp-rival-bars i span, .pvp-vital > i span { display: block; width: 100%; height: 100%; transform: scaleX(1); transform-origin: left; background: linear-gradient(90deg, var(--red), var(--amber)); transition: transform 0.16s linear; }
+.pvp-rival-bars i:last-child span, .pvp-vital.shield > i span { background: linear-gradient(90deg, #3ba5e8, var(--cyan)); }
+.pvp-phase-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; text-align: center; border-color: rgba(255, 211, 92, 0.43); }
+.pvp-phase-card > span { color: var(--gold); font: 800 10px var(--display); letter-spacing: 0.12em; }
+.pvp-phase-card > b { font: italic 800 20px var(--display); }
+.pvp-phase-card > small { opacity: 0.56; font: 700 9px var(--display); letter-spacing: 0.1em; }
+.pvp-phase-card code { color: var(--cyan-2); font: 800 10px var(--display); letter-spacing: 0.12em; }
+.pvp-center-mark { position: absolute; left: 50%; top: 51%; display: flex; align-items: center; gap: 8px; transform: translate(-50%, -50%); opacity: 0.5; filter: drop-shadow(0 0 8px var(--cyan)); }
+.pvp-center-mark i { width: 18px; height: 18px; border: 2px solid var(--cyan); transform: rotate(45deg); }
+.pvp-center-mark b { width: 5px; height: 5px; border-radius: 50%; background: var(--cream); box-shadow: 0 0 12px var(--cyan); }
+.pvp-match-status { position: absolute; top: calc(92px + var(--safe-t)); left: 50%; max-width: calc(100vw - 24px); margin: 0; padding: 8px 16px; transform: translateX(-50%); border: 1px solid rgba(79, 227, 255, 0.3); background: rgba(8, 11, 26, 0.68); color: var(--cyan-2); font: 800 11px var(--display); letter-spacing: 0.13em; text-align: center; text-transform: uppercase; text-shadow: 0 2px 0 #000; }
+.pvp-bottom-hud { position: absolute; left: calc(22px + var(--safe-l)); bottom: calc(20px + var(--safe-b)); display: grid; grid-template-columns: minmax(180px, 1.1fr) minmax(180px, 1.1fr); gap: 9px 15px; width: min(520px, 50vw); padding: 12px 15px; background: rgba(8, 11, 26, 0.8); border: 1px solid rgba(159, 244, 255, 0.2); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55); backdrop-filter: blur(7px); }
+.pvp-vital { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; font: 800 10px var(--display); letter-spacing: 0.12em; text-transform: uppercase; }
+.pvp-vital > span { opacity: 0.66; }
+.pvp-vital > b { color: var(--gold); font-size: 11px; letter-spacing: 0; }
+.pvp-vital.shield > b { color: var(--cyan-2); }
+.pvp-vital > i { grid-column: 1 / -1; height: 8px; }
+.pvp-vital:first-child > i span { background: linear-gradient(90deg, var(--red), var(--gold)); }
+.pvp-cooldown { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; align-items: center; padding-top: 8px; border-top: 1px solid rgba(255, 244, 228, 0.14); font: 800 9px var(--display); letter-spacing: 0.1em; text-transform: uppercase; }
+.pvp-cooldown > span { opacity: 0.6; }
+.pvp-cooldown > b { color: var(--cyan-2); font-size: 10px; }
+.pvp-cooldown > i { grid-column: 1 / -1; display: block; height: 6px; overflow: hidden; background: rgba(255, 244, 228, 0.12); transform: skewX(-16deg); }
+.pvp-cooldown > i span { display: block; height: 100%; width: 100%; transform: scaleX(1); transform-origin: left; background: var(--cyan); transition: transform 0.12s linear; }
+.pvp-cooldown > small { grid-column: 1; color: var(--cyan); font: 800 9px var(--display); }
+.pvp-cooldown > kbd { grid-column: 2; grid-row: 1 / span 3; min-width: 21px; height: 21px; }
+.pvp-cooldown.is-ready > small { color: var(--lime); }
+.pvp-roll-cooldown { grid-template-columns: 1fr auto; }
+.pvp-roll-cooldown > small { grid-column: 2; grid-row: 1 / span 2; color: var(--lime); }
+.pvp-weapon-boost > i span { background: linear-gradient(90deg, var(--amber), var(--gold)); }
+.pvp-weapon-boost.is-ready > b { color: var(--gold); }
+.pvp-pickup-toast { position: absolute; z-index: 4; top: calc(136px + var(--safe-t)); left: 50%; max-width: calc(100vw - 28px); padding: 8px 15px; transform: translate(-50%, -6px); border: 1px solid rgba(255, 211, 92, 0.55); background: rgba(8, 11, 26, 0.88); color: var(--gold); font: 800 11px var(--display); letter-spacing: 0.15em; text-align: center; text-transform: uppercase; opacity: 0; pointer-events: none; transition: opacity 0.15s ease, transform 0.15s ease; }
+.pvp-pickup-toast.is-active { transform: translate(-50%, 0); opacity: 1; }
+.pvp-match-actions { position: absolute; right: calc(20px + var(--safe-r)); bottom: calc(20px + var(--safe-b)); display: flex; gap: 8px; }
+.pvp-match-actions .btn { min-width: 0; padding: 8px 14px; font-size: 11px; }
+.pvp-match-actions .btn span { justify-content: center; }
+.pvp-touch { display: none; }
+body.has-touch .screen-pvp-match .pvp-touch { display: block; }
+.pvp-touch .touch-stick { left: calc(16% + var(--safe-l)); top: 70%; }
+.pvp-touch .touch-btn { z-index: 2; pointer-events: auto; font-size: 11px; }
+.pvp-fire { right: calc(22px + var(--safe-r)); bottom: calc(22px + var(--safe-b)); width: 92px; height: 92px; background: radial-gradient(circle at 40% 35%, #ffe8a0, var(--amber)); }
+.pvp-roll { right: calc(126px + var(--safe-r)); bottom: calc(28px + var(--safe-b)); width: 68px; height: 68px; background: radial-gradient(circle at 40% 35%, #d4fbff, var(--cyan)); }
+.pvp-ability { right: calc(32px + var(--safe-r)); bottom: calc(126px + var(--safe-b)); width: 64px; height: 64px; background: radial-gradient(circle at 40% 35%, #edddff, #a88bff); }
+.pvp-up, .pvp-down { right: calc(142px + var(--safe-r)); width: 46px; height: 46px; background: radial-gradient(circle at 40% 35%, #d4fbff, #4a8fb6); }
+.pvp-up { bottom: calc(126px + var(--safe-b)); }
+.pvp-down { bottom: calc(74px + var(--safe-b)); }
+
+@media (max-width: 680px) {
+  .pvp-lobby-modal { padding: 19px 17px 20px; gap: 12px; }
+  .pvp-lobby-actions { grid-template-columns: 1fr; gap: 8px; }
+  .pvp-room-input { grid-row: 2; }
+  .pvp-room-code b { font-size: 24px; }
+  .pvp-topbar { top: calc(8px + var(--safe-t)); grid-template-columns: 1fr 0.72fr 1fr; gap: 5px; width: calc(100vw - 16px); }
+  .pvp-player-card, .pvp-phase-card { padding: 7px 7px; }
+  .pvp-player-card > b { font-size: 10px; }
+  .pvp-player-card small { font-size: 7px; }
+  .pvp-scoreline { gap: 4px; font-size: 18px; }
+  .pvp-scoreline i { font-size: 12px; }
+  .pvp-phase-card > span { font-size: 8px; letter-spacing: 0.04em; }
+  .pvp-phase-card > b { font-size: 16px; }
+  .pvp-phase-card > small { font-size: 7px; }
+  .pvp-phase-card code { font-size: 8px; }
+  .pvp-match-status { top: calc(75px + var(--safe-t)); font-size: 9px; letter-spacing: 0.06em; }
+  .pvp-pickup-toast { top: calc(111px + var(--safe-t)); padding: 6px 10px; font-size: 9px; letter-spacing: 0.08em; }
+  .pvp-bottom-hud { left: calc(10px + var(--safe-l)); bottom: calc(11px + var(--safe-b)); width: min(280px, 62vw); grid-template-columns: 1fr 1fr; gap: 7px 10px; padding: 9px 10px; }
+  .pvp-vital { font-size: 8px; }
+  .pvp-vital > b { font-size: 9px; }
+  .pvp-cooldown { font-size: 7px; gap: 3px 5px; }
+  .pvp-cooldown > b, .pvp-cooldown > small { font-size: 8px; }
+  .pvp-cooldown > kbd { min-width: 18px; height: 18px; font-size: 8px; }
+  .pvp-match-actions { right: calc(9px + var(--safe-r)); bottom: calc(112px + var(--safe-b)); flex-direction: column; gap: 5px; }
+  .pvp-match-actions .btn { padding: 6px 10px; font-size: 9px; }
+  .pvp-touch .touch-stick { left: calc(19% + var(--safe-l)); top: 69%; width: 112px; height: 112px; margin: -56px 0 0 -56px; }
+  .pvp-touch .touch-stick i { width: 52px; height: 52px; margin: -26px 0 0 -26px; }
+  .pvp-fire { width: 78px; height: 78px; right: calc(13px + var(--safe-r)); bottom: calc(16px + var(--safe-b)); }
+  .pvp-roll { width: 58px; height: 58px; right: calc(96px + var(--safe-r)); bottom: calc(18px + var(--safe-b)); }
+  .pvp-ability { width: 56px; height: 56px; right: calc(21px + var(--safe-r)); bottom: calc(102px + var(--safe-b)); }
+  .pvp-up, .pvp-down { width: 40px; height: 40px; right: calc(108px + var(--safe-r)); }
+  .pvp-up { bottom: calc(104px + var(--safe-b)); }
+  .pvp-down { bottom: calc(58px + var(--safe-b)); }
+}

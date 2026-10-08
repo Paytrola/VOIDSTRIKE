@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: voidstrike-pvp
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm --prefix server ci --omit=dev
+    startCommand: npm --prefix server start
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: https://voidstrike-kg4srpnu.manus.game,http://localhost:3000,http://127.0.0.1:3000,http://localhost:4173,http://127.0.0.1:4173,http://localhost:5173,http://127.0.0.1:5173

@@ -30,6 +30,8 @@ const PAD_BINDINGS: Record<Action, number[]> = { fire: [7, 5, 0], roll: [6, 2], 
 export class Input {
   /** Steering intent in [-1, 1]: x = right, y = up. */
   readonly move = { x: 0, y: 0 }
+  /** Free-flight PvP intent: strafe, climb/dive, and forward/reverse, each in [-1, 1]. */
+  readonly flight = { strafe: 0, vertical: 0, forward: 0 }
   /** Right-stick aim in [-1, 1] (gamepad). */
   readonly aim = { x: 0, y: 0 }
   /** Last absolute pointer position in NDC (-1..1, y up) and whether it moved since read. */
@@ -45,6 +47,7 @@ export class Input {
   private pressed_ = new Set<Action>()
   private mouseDelta = { x: 0, y: 0 }
   private touchMove = { x: 0, y: 0 }
+  private touchFlightVertical = 0
   private touchButtons = new Set<Action>()
   private padPrev = new Set<Action>()
   private listeners: Array<() => void> = []
@@ -79,7 +82,8 @@ export class Input {
     })
     on(window, 'mouseup', e => this.mouseButtons.delete(e.button))
     on(canvas, 'contextmenu', e => e.preventDefault())
-    on(window, 'mousemove', e => {
+    on(window, 'pointermove', e => {
+      if (e.pointerType === 'touch' && e.clientX < window.innerWidth * 0.45) return
       if (document.pointerLockElement === canvas) {
         this.mouseDelta.x += e.movementX
         this.mouseDelta.y += e.movementY
@@ -120,6 +124,11 @@ export class Input {
     this.touchMove.y = y
   }
 
+  setTouchFlightVertical(value: number): void {
+    this.method = 'touch'
+    this.touchFlightVertical = Math.max(-1, Math.min(1, value))
+  }
+
   setTouchButton(action: Action, down: boolean): void {
     this.method = 'touch'
     if (down && !this.touchButtons.has(action)) this.pressed_.add(action)
@@ -132,6 +141,9 @@ export class Input {
     const k = (codes: string[]) => codes.some(code => this.keys.has(code))
     let x = (k(MOVE_KEYS.right) ? 1 : 0) - (k(MOVE_KEYS.left) ? 1 : 0)
     let y = (k(MOVE_KEYS.up) ? 1 : 0) - (k(MOVE_KEYS.down) ? 1 : 0)
+    let flightStrafe = x
+    let flightForward = y
+    let flightVertical = (k(['KeyR']) ? 1 : 0) - (k(['KeyF']) ? 1 : 0) + this.touchFlightVertical
     this.held_.clear()
     for (const [action, codes] of Object.entries(KEY_BINDINGS) as [Action, string[]][]) {
       if (k(codes)) this.held_.add(action)
@@ -157,7 +169,10 @@ export class Input {
       if (lx !== 0 || ly !== 0) {
         x = lx
         y = -ly
+        flightStrafe = lx
+        flightForward = -ly
       }
+      flightVertical = (pad.buttons[12]?.pressed ? 1 : 0) - (pad.buttons[13]?.pressed ? 1 : 0) + this.touchFlightVertical
       this.aim.x = rx
       this.aim.y = -ry * (this.invertY ? -1 : 1)
       const now = new Set<Action>()
@@ -173,6 +188,11 @@ export class Input {
     const len = Math.hypot(x, y)
     this.move.x = len > 1 ? x / len : x
     this.move.y = len > 1 ? y / len : y
+    const flightLen = Math.hypot(flightStrafe, flightVertical, flightForward)
+    const scale = flightLen > 1 ? 1 / flightLen : 1
+    this.flight.strafe = flightStrafe * scale
+    this.flight.vertical = flightVertical * scale
+    this.flight.forward = flightForward * scale
   }
 
   held(action: Action): boolean {

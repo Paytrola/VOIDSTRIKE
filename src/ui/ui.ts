@@ -3,10 +3,11 @@ import type { I18n } from '../engine/i18n'
 import type { Input } from '../engine/input'
 import { insertScore, type AircraftClassId, type Quality, type SaveData, type SaveStore } from '../engine/save'
 import type { BannerStyle, HudData, PopupKind } from '../game/game'
+import type { PvpHudData } from '../game/pvp/mode'
 import { AIRCRAFT_CLASSES, isAircraftClassId } from '../game/aircraft'
 import { accuracy, formatClock, type Grade, type RunState } from '../game/rules'
 
-export type Screen = 'boot' | 'title' | 'hangar' | 'hud' | 'pause' | 'settings' | 'leaderboard' | 'results'
+export type Screen = 'boot' | 'title' | 'hangar' | 'hud' | 'pause' | 'settings' | 'leaderboard' | 'results' | 'pvp-lobby' | 'pvp-match'
 
 export type UiActions = {
   play(): void
@@ -16,6 +17,11 @@ export type UiActions = {
   quit(): void
   selectAircraft(id: AircraftClassId): void
   settings(patch: Partial<SaveData>): void
+  openPvp(): void
+  pvpCreate(): void
+  pvpJoin(room: string): void
+  pvpRetry(): void
+  pvpLeave(): void
 }
 
 const ICON = {
@@ -65,6 +71,8 @@ export class Ui {
   private lastMethod = ''
   private checkpointRun = false
   private aircraftClass: AircraftClassId = 'wraith'
+  private lastPvpPickupEventId = 0
+  private pvpPickupTimer = 0
   private readonly el: Record<string, HTMLElement> = {}
 
   constructor(
@@ -105,6 +113,7 @@ export class Ui {
     const prev = this.stack.pop()
     if (prev) this.setScreen(prev)
     else if (this.screen === 'pause') this.actions.resume()
+    else if (this.screen === 'pvp-lobby' || this.screen === 'pvp-match') this.actions.pvpLeave()
   }
 
   private setScreen(screen: Screen): void {
@@ -162,6 +171,106 @@ export class Ui {
     }
     this.el.abilityName.textContent = this.i18n.t(profile.ability.nameKey)
     this.el.abilityPip.style.setProperty('--ability-color', profile.weapon.color)
+    this.el.pvpClassName.textContent = this.i18n.t(profile.titleKey)
+    this.el.pvpLobbyAbility.textContent = this.i18n.t(profile.ability.nameKey)
+  }
+
+  showPvpLobby(): void {
+    this.show('pvp-lobby')
+    this.setPvpStatus('pvp.instructions')
+  }
+
+  showPvpMatch(resumed = false): void {
+    if (!resumed) {
+      this.lastPvpPickupEventId = 0
+      window.clearTimeout(this.pvpPickupTimer)
+      this.el.pvpPickup.textContent = ''
+      this.el.pvpPickup.classList.remove('is-active')
+    }
+    this.show('pvp-match')
+    this.setPvpRetryVisible(false)
+  }
+
+  setPvpStatus(key: string, vars?: Record<string, string | number>): void {
+    const message = this.i18n.t(key, vars)
+    this.el.pvpStatus.textContent = message
+    this.el.pvpMatchStatus.textContent = message
+  }
+
+  setPvpRoom(room: string): void {
+    const code = this.el.pvpRoomCode
+    code.textContent = room
+    code.parentElement?.classList.toggle('is-hidden', !room)
+  }
+
+  setPvpRetryVisible(visible: boolean): void {
+    this.el.pvpRetry.classList.toggle('is-hidden', !visible)
+  }
+
+  updatePvp(h: PvpHudData): void {
+    const phase = h.phase
+    const local = h.local
+    const rival = h.rival
+    const errorStatus: Record<string, string> = {
+      room_not_found: 'pvp.error.room_not_found', room_full: 'pvp.error.room_full', invalid_room: 'pvp.error.invalid_room',
+      input_rate_limited: 'pvp.error.rate_limited', message_rate_limited: 'pvp.error.rate_limited', rate_limited: 'pvp.error.rate_limited',
+      origin_not_allowed: 'pvp.error.origin_not_allowed', protocol_mismatch: 'pvp.error.incompatible_build',
+      build_mismatch: 'pvp.error.incompatible_build', resume_expired: 'pvp.error.resume_expired',
+      server_busy: 'pvp.error.server_busy', max_connections: 'pvp.error.server_busy',
+    }
+    const status = phase === 'complete'
+      ? h.winner === local?.id ? 'pvp.youWin' : 'pvp.youLose'
+      : h.connection === 'connecting'
+      ? 'pvp.connecting'
+      : h.connection === 'reconnecting'
+        ? 'pvp.reconnecting'
+        : h.connection === 'disconnected'
+          ? errorStatus[h.errorCode ?? ''] ?? 'pvp.disconnected'
+          : phase === 'waiting'
+      ? (rival?.connected ? 'pvp.opponentReady' : 'pvp.waiting')
+      : phase === 'countdown'
+        ? 'pvp.countdown'
+          : phase === 'live'
+            ? (!local?.alive ? 'pvp.respawning' : 'pvp.fight')
+            : 'pvp.phase.waiting'
+    const statusVars = phase === 'countdown' ? { seconds: h.secondsLeft } : undefined
+    this.el.pvpMatchStatus.textContent = this.i18n.t(status, statusVars)
+    this.setPvpRetryVisible(phase !== 'complete' && h.connection === 'disconnected')
+    this.el.pvpSelfName.textContent = local?.callsign ?? '—'
+    this.el.pvpRivalName.textContent = rival?.callsign ?? this.i18n.t('pvp.opponent')
+    this.el.pvpSelfScore.textContent = String(local?.score ?? 0)
+    this.el.pvpRivalScore.textContent = String(rival?.score ?? 0)
+    this.el.pvpSelfHealth.style.transform = `scaleX(${local ? Math.max(0, local.hull / local.maxHull) : 0})`
+    this.el.pvpSelfShield.style.transform = `scaleX(${local ? Math.max(0, local.shield / 60) : 0})`
+    this.el.pvpRivalHealth.style.transform = `scaleX(${rival ? Math.max(0, rival.hull / rival.maxHull) : 0})`
+    this.el.pvpRivalShield.style.transform = `scaleX(${rival ? Math.max(0, rival.shield / 60) : 0})`
+    const profile = AIRCRAFT_CLASSES[local?.classId ?? this.aircraftClass]
+    this.el.pvpAbilityName.textContent = this.i18n.t(profile.ability.nameKey)
+    const duration = profile.ability.cooldown * 1000
+    const ready = local?.abilityReadyIn ?? duration
+    this.el.pvpAbilityTrack.style.transform = `scaleX(${duration > 0 ? Math.max(0, 1 - ready / duration) : 1})`
+    this.el.pvpAbilityState.textContent = ready <= 0 ? this.i18n.t('hud.abilityReady') : `${Math.ceil(ready / 1000)}s`
+    this.el.pvpAbility.classList.toggle('is-ready', ready <= 0)
+    const boost = Math.max(0, local?.weaponBoostRemaining ?? 0)
+    this.el.pvpBoostState.textContent = boost > 0 ? `${Math.ceil(boost / 1000)}s` : this.i18n.t('pvp.weaponBoostOff')
+    this.el.pvpBoostTrack.style.transform = `scaleX(${h.weaponBoostMs > 0 ? Math.min(1, boost / h.weaponBoostMs) : 0})`
+    this.el.pvpWeaponBoost.classList.toggle('is-ready', boost > 0)
+    if (local && local.pickupEventId > this.lastPvpPickupEventId && local.lastPickupKind) {
+      this.lastPvpPickupEventId = local.pickupEventId
+      this.el.pvpPickup.textContent = this.i18n.t(`pvp.pickup.${local.lastPickupKind}`)
+      this.el.pvpPickup.classList.add('is-active')
+      window.clearTimeout(this.pvpPickupTimer)
+      this.pvpPickupTimer = window.setTimeout(() => this.el.pvpPickup.classList.remove('is-active'), 1700)
+      this.audio.play('pickup')
+    }
+    const rollReady = local?.rollReadyIn ?? 0
+    this.el.pvpRollState.textContent = rollReady <= 0 ? this.i18n.t('hud.abilityReady') : `${Math.ceil(rollReady / 1000)}s`
+    this.el.pvpHullValue.textContent = local ? `${Math.ceil(local.hull)} / ${local.maxHull}` : '—'
+    this.el.pvpShieldValue.textContent = local ? `${Math.ceil(local.shield)} / 60` : '—'
+    if (h.room) this.setPvpRoom(h.room)
+    this.el.pvpRoomCodeMatch.textContent = h.room || '------'
+    this.el.pvpPhase.textContent = phase === 'countdown' ? this.i18n.t(status, statusVars) : this.i18n.t(`pvp.phase.${phase}`)
+    this.el.pvpTime.textContent = phase === 'countdown' ? String(h.secondsLeft) : phase === 'complete' ? '5' : '1V1'
   }
 
   // ─── HUD ────────────────────────────────────────────────────────────────
@@ -461,6 +570,16 @@ export class Ui {
       case 'quit': this.actions.quit(); break
       case 'settings': this.push('settings'); break
       case 'leaderboard': this.push('leaderboard'); break
+      case 'pvp': this.actions.openPvp(); break
+      case 'pvp-create': this.actions.pvpCreate(); break
+      case 'pvp-join': this.actions.pvpJoin(this.q<HTMLInputElement>('[data-el="pvpRoomInput"]').value.trim().toUpperCase()); break
+      case 'pvp-retry': this.actions.pvpRetry(); break
+      case 'pvp-leave': this.actions.pvpLeave(); break
+      case 'pvp-copy': {
+        const code = this.el.pvpRoomCode.textContent ?? ''
+        if (code) void navigator.clipboard?.writeText(code).then(() => this.setPvpStatus('pvp.copied')).catch(() => this.setPvpStatus('pvp.copyError'))
+        break
+      }
       case 'back': this.back(); break
       case 'save-score': this.saveScore(); break
       case 'pause': window.dispatchEvent(new CustomEvent('game:pause')); break
@@ -469,6 +588,10 @@ export class Ui {
 
   private onInput(e: Event): void {
     const el = e.target as HTMLInputElement
+    if (el.dataset.el === 'pvpRoomInput') {
+      el.value = el.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 6)
+      return
+    }
     if (el.type !== 'range') return
     this.paintRange(el)
     this.actions.settings({ [el.name]: Number(el.value) } as Partial<SaveData>)
@@ -486,7 +609,8 @@ export class Ui {
     const typing = (e.target as HTMLElement).matches?.('input[type="text"]')
     if (typing && e.code === 'Enter') {
       e.preventDefault()
-      this.saveScore()
+      if (this.screen === 'results') this.saveScore()
+      else if (this.screen === 'pvp-lobby') this.actions.pvpJoin(this.q<HTMLInputElement>('[data-el="pvpRoomInput"]').value.trim().toUpperCase())
       return
     }
     if ((e.code === 'Escape' || (e.code === 'Backspace' && !typing)) && this.screen !== 'title') {
@@ -638,6 +762,7 @@ export class Ui {
     <p class="tagline" data-i18n="game.tagline"></p>
     <nav class="menu">
       <button data-nav class="btn btn-primary" data-action="play"><span data-i18n="menu.play"></span></button>
+      <button data-nav class="btn" data-action="pvp"><span data-i18n="pvp.menu"></span></button>
       <button data-nav class="btn" data-action="hangar"><span data-i18n="menu.hangar"></span></button>
       <button data-nav class="btn" data-action="leaderboard"><span data-i18n="menu.leaderboard"></span></button>
       <button data-nav class="btn" data-action="settings"><span data-i18n="menu.settings"></span></button>
@@ -684,6 +809,56 @@ export class Ui {
     <nav class="menu menu-row"><button data-nav class="btn" data-action="back"><span data-i18n="menu.back"></span></button><button data-nav class="btn btn-primary" data-action="play"><span data-i18n="menu.play"></span></button></nav>
   </div>
   <footer class="bottom-bar"><div class="prompts"></div></footer>
+</section>
+
+<section class="screen screen-modal screen-pvp-lobby" data-screen="pvp-lobby">
+  <div class="modal pvp-lobby-modal">
+    <header class="pvp-header">
+      <p class="hangar-eyebrow" data-i18n="pvp.eyebrow"></p>
+      <h2 class="modal-title" data-i18n="pvp.title"></h2>
+      <p class="hangar-sub" data-i18n="pvp.description"></p>
+    </header>
+    <div class="pvp-loadout"><span data-i18n="pvp.selectedClass"></span><b data-el="pvpClassName">WRAITH</b><i>·</i><span data-el="pvpLobbyAbility"></span></div>
+    <div class="pvp-lobby-actions">
+      <button data-nav class="btn btn-primary" data-action="pvp-create"><span data-i18n="pvp.create"></span></button>
+      <label class="pvp-room-input"><span data-i18n="pvp.roomCode"></span><input data-nav data-el="pvpRoomInput" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="latin" data-i18n-placeholder="pvp.roomPlaceholder" /></label>
+      <button data-nav class="btn" data-action="pvp-join"><span data-i18n="pvp.join"></span></button>
+    </div>
+    <div class="pvp-room-code is-hidden"><span data-i18n="pvp.invite"></span><b data-el="pvpRoomCode">------</b><button data-nav data-action="pvp-copy" data-i18n="pvp.copy"></button></div>
+    <p class="pvp-status" data-el="pvpStatus" role="status" aria-live="polite"></p>
+    <nav class="menu menu-row"><button data-nav class="btn" data-action="back"><span data-i18n="menu.back"></span></button></nav>
+  </div>
+  <footer class="bottom-bar"><div class="prompts"></div></footer>
+</section>
+
+<section class="screen screen-pvp-match" data-screen="pvp-match">
+  <div class="pvp-topbar">
+    <div class="pvp-player-card pvp-player-self"><small data-i18n="pvp.you"></small><b data-el="pvpSelfName">PILOT</b><div class="pvp-scoreline"><span data-el="pvpSelfScore">0</span><i>—</i><span data-el="pvpRivalScore">0</span></div></div>
+    <div class="pvp-phase-card"><span data-el="pvpPhase">WAITING</span><b data-el="pvpTime">1V1</b><small><span data-i18n="pvp.roomCode"></span> <code data-el="pvpRoomCodeMatch">------</code></small></div>
+    <div class="pvp-player-card pvp-player-rival"><small data-i18n="pvp.rival"></small><b data-el="pvpRivalName">OPPONENT</b><div class="pvp-rival-bars"><i><span data-el="pvpRivalHealth"></span></i><i><span data-el="pvpRivalShield"></span></i></div></div>
+  </div>
+  <div class="pvp-center-mark" aria-hidden="true"><i></i><b></b><i></i></div>
+  <p class="pvp-match-status" data-el="pvpMatchStatus" role="status" aria-live="polite"></p>
+  <div class="pvp-bottom-hud">
+    <div class="pvp-vital"><span data-i18n="hud.hull"></span><b data-el="pvpHullValue">—</b><i><span data-el="pvpSelfHealth"></span></i></div>
+    <div class="pvp-vital shield"><span data-i18n="hud.shield"></span><b data-el="pvpShieldValue">—</b><i><span data-el="pvpSelfShield"></span></i></div>
+    <div class="pvp-cooldown" data-el="pvpAbility"><span data-i18n="hud.ability"></span><b data-el="pvpAbilityName">—</b><i><span data-el="pvpAbilityTrack"></span></i><small data-el="pvpAbilityState">READY</small><kbd>E</kbd></div>
+    <div class="pvp-cooldown pvp-roll-cooldown"><span data-i18n="hud.roll"></span><b>K / Space</b><small data-el="pvpRollState">READY</small></div>
+    <div class="pvp-cooldown pvp-weapon-boost" data-el="pvpWeaponBoost"><span data-i18n="pvp.weaponUplink"></span><b data-el="pvpBoostState">OFF</b><i><span data-el="pvpBoostTrack"></span></i></div>
+    <div class="pvp-touch touch-pvp">
+      <div class="touch-stick"><i></i></div>
+      <button class="touch-btn pvp-fire" data-touch="fire" data-i18n="touch.fire"></button>
+      <button class="touch-btn pvp-roll" data-touch="roll" data-i18n="touch.roll"></button>
+      <button class="touch-btn pvp-ability" data-touch="ability" data-i18n="hud.ability"></button>
+      <button class="touch-btn pvp-up" data-flight-vertical="1" data-i18n-label="pvp.climb">+</button>
+      <button class="touch-btn pvp-down" data-flight-vertical="-1" data-i18n-label="pvp.dive">−</button>
+    </div>
+  </div>
+  <div class="pvp-pickup-toast" data-el="pvpPickup" aria-live="polite"></div>
+  <div class="pvp-match-actions">
+    <button data-nav data-el="pvpRetry" class="btn btn-small is-hidden" data-action="pvp-retry"><span data-i18n="pvp.retry"></span></button>
+    <button data-nav class="btn btn-small" data-action="pvp-leave"><span data-i18n="pvp.leave"></span></button>
+  </div>
 </section>
 
 <section class="screen screen-hud" data-screen="hud">

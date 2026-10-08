@@ -1,0 +1,17 @@
+{
+  "name": "voidstrike-pvp-server",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+  "start": "node src/server.mjs",
+  "test": "node --test",
+  "dev": "node --watch src/server.mjs"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}

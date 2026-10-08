@@ -1,16 +1,17 @@
 {
   "name": "voidstrike",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "node scripts/manus-game-sharing/build.mjs",
-    "preview": "vite preview --port 4173 --strictPort",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "smoke": "node scripts/smoke.mjs",
-    "manus:build-source": "tsc --noEmit && vite build && node scripts/check-size.mjs"
+  "dev": "vite",
+  "build": "node scripts/manus-game-sharing/build.mjs",
+  "preview": "vite preview --port 4173 --strictPort",
+  "typecheck": "tsc --noEmit",
+  "test": "vitest run && npm --prefix server test",
+  "smoke": "node scripts/smoke.mjs",
+  "smoke:pvp": "node scripts/pvp-browser-smoke.mjs",
+  "manus:build-source": "tsc --noEmit && vite build && node scripts/check-size.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
